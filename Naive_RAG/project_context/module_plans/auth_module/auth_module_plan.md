@@ -21,8 +21,8 @@ Module scope is limited to:
 
 | Task | File | Status | Notes |
 | --- | --- | --- | --- |
-| Task 01: Planning and Task Files | [task_01.md](task_01.md) | Review | Main plan and task files created. |
-| Task 02: Server Foundation | [task_02.md](task_02.md) | Pending | Start only after Task 01 approval. |
+| Task 01: Planning and Task Files | [task_01.md](task_01.md) | Approved | User approved the plan/task-file structure. |
+| Task 02: Server Foundation | [task_02.md](task_02.md) | Review | Added server dependencies, typed config, Drizzle database service, users schema, migration config, and initial migration. Build and tests passed. |
 | Task 03: Server Auth API | [task_03.md](task_03.md) | Pending | Start only after Task 02 approval. |
 | Task 04: Server Auth Guard | [task_04.md](task_04.md) | Pending | Start only after Task 03 approval. |
 | Task 05: Client Auth Infrastructure | [task_05.md](task_05.md) | Pending | Start only after Task 04 approval. |
@@ -51,4 +51,6 @@ Module scope is limited to:
 
 ## Completion Summary
 
-No implementation tasks are approved yet.
+- Task 01 is approved.
+- Task 02 is ready for review.
+- No auth API, server guard, or client auth implementation has started yet.

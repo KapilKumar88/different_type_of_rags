@@ -19,6 +19,48 @@
 
 ---
 
+## Module Development Workflow
+
+For every new module, create a planning folder before implementation:
+
+`project_context/module_plans/<module_name>/`
+
+Inside that folder, always create:
+
+- `<module_name>_plan.md` as the lookup and status tracker.
+- `task_01.md`, `task_02.md`, etc. as detailed task files.
+
+The module plan file must include:
+
+- Module purpose and scope.
+- Status legend.
+- Task status table with links to each `task_##.md` file.
+- Key technical decisions.
+- Strict workflow and review-gate instructions.
+- Completion summary.
+
+Each task file must include:
+
+- Goal.
+- Scope.
+- Implementation details.
+- Completion criteria.
+- Test cases.
+- Review gate.
+
+Module work must follow these rules:
+
+- Always read the module plan file before starting or resuming module work.
+- Always read the current task file before implementing that task.
+- Complete tasks in numeric order.
+- Do not implement future tasks early.
+- After completing each task, update the module plan file with the task status and notes.
+- Stop after each task and ask the user for review.
+- Continue to the next task only after explicit approval.
+- After the full module is completed and approved, update `project_context/MASTER_PROJECT_REFERENCE.md` with the new current-state facts, API contracts, architecture changes, verification commands, and any pitfalls or decisions discovered during implementation.
+
+---
+
 ## Coding Standards
 
 ### General

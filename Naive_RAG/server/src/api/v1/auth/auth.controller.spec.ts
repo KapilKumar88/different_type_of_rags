@@ -2,7 +2,7 @@ import type { Response } from 'express';
 import { cookieConfig } from '../../../config/cookie.config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import type { CookieRequest, SafeUser } from '../../../types/auth.types';
+import type { SafeUser } from '../../../types/auth.types';
 
 describe('AuthController', () => {
   let authService: jest.Mocked<AuthService>;
@@ -18,7 +18,6 @@ describe('AuthController', () => {
     authService = {
       register: jest.fn(),
       login: jest.fn(),
-      getAuthenticatedUser: jest.fn(),
     } as unknown as jest.Mocked<AuthService>;
     authController = new AuthController(authService);
   });
@@ -89,17 +88,9 @@ describe('AuthController', () => {
     });
   });
 
-  it('returns the authenticated user from the auth cookie', async () => {
-    const request = {
-      cookies: {
-        [cookieConfig.name]: 'signed-token',
-      },
-    } as CookieRequest;
-    authService.getAuthenticatedUser.mockResolvedValue(user);
+  it('returns the guard-provided authenticated user', () => {
+    const result = authController.me(user);
 
-    const result = await authController.me(request);
-
-    expect(authService.getAuthenticatedUser).toHaveBeenCalledWith('signed-token');
     expect(result).toEqual({
       success: true,
       message: 'Authenticated user retrieved',

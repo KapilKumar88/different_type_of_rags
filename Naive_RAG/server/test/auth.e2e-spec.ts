@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AuthModule } from '../src/api/v1/auth/auth.module';
+import { AppModule } from '../src/app.module';
 import { AuthRepository } from '../src/api/v1/auth/auth.repository';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import type { User } from '../src/database/schemas';
@@ -45,7 +45,7 @@ describe('Auth API (e2e)', () => {
     };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AuthModule],
+      imports: [AppModule],
     })
       .overrideProvider(AuthRepository)
       .useValue(authRepository)
@@ -136,6 +136,18 @@ describe('Auth API (e2e)', () => {
           email: 'ada@example.com',
         },
       },
+    });
+  });
+
+  it('rejects /me without a valid auth cookie', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .expect(401);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'Authentication cookie is missing',
+      data: null,
     });
   });
 

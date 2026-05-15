@@ -5,14 +5,15 @@ import {
   HttpCode,
   HttpStatus,
   Post,
-  Req,
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { cookieConfig } from '../../../config/cookie.config';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
+import { CurrentUser } from '../../../guard/decorators/current-user.decorator';
+import { Public } from '../../../guard/decorators/public.decorator';
 import { AuthService } from './auth.service';
-import type { AuthResult, CookieRequest } from '../../../types/auth.types';
+import type { AuthResult, SafeUser } from '../../../types/auth.types';
 import { loginSchema, type LoginDto } from './dto/login.dto';
 import { registerSchema, type RegisterDto } from './dto/register.dto';
 
@@ -20,6 +21,7 @@ import { registerSchema, type RegisterDto } from './dto/register.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(
@@ -36,6 +38,7 @@ export class AuthController {
     };
   }
 
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -53,11 +56,7 @@ export class AuthController {
   }
 
   @Get('me')
-  async me(@Req() request: CookieRequest) {
-    const user = await this.authService.getAuthenticatedUser(
-      request.cookies?.[cookieConfig.name],
-    );
-
+  me(@CurrentUser() user: SafeUser) {
     return {
       success: true,
       message: 'Authenticated user retrieved',

@@ -23,8 +23,8 @@ Module scope is limited to:
 | --- | --- | --- | --- |
 | Task 01: Planning and Task Files | [task_01.md](task_01.md) | Approved | User approved the plan/task-file structure. |
 | Task 02: Server Foundation | [task_02.md](task_02.md) | Approved | User approved the server foundation. |
-| Task 03: Server Auth API | [task_03.md](task_03.md) | Review | Added register, login, and me endpoints with Zod validation, cookie JWT sessions, repository-backed persistence, standardized errors, unit tests, and e2e tests. Build and tests passed. |
-| Task 04: Server Auth Guard | [task_04.md](task_04.md) | Pending | Start only after Task 03 approval. |
+| Task 03: Server Auth API | [task_03.md](task_03.md) | Approved | User approved the server auth API. |
+| Task 04: Server Auth Guard | [task_04.md](task_04.md) | Review | Added global JWT auth guard, Public and CurrentUser decorators, cookie JWT extraction, protected /me wiring, unit tests, and e2e coverage. Build and tests passed. |
 | Task 05: Client Auth Infrastructure | [task_05.md](task_05.md) | Pending | Start only after Task 04 approval. |
 | Task 06: Login Flow | [task_06.md](task_06.md) | Pending | Start only after Task 05 approval. |
 | Task 07: Registration Flow | [task_07.md](task_07.md) | Pending | Start only after Task 06 approval. |
@@ -53,5 +53,6 @@ Module scope is limited to:
 
 - Task 01 is approved.
 - Task 02 is approved.
-- Task 03 is ready for review.
-- No reusable server guard or client auth implementation has started yet.
+- Task 03 is approved.
+- Task 04 is ready for review.
+- No client auth implementation has started yet.

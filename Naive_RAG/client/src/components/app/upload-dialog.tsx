@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Upload, FileText, X, CheckCircle2 } from "lucide-react";
+import { Upload, FileText, X, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,43 +10,64 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { ApiClientError } from "@/lib/api-client";
+import { documentsService } from "@/services/documents.service";
 import { toast } from "sonner";
 
-type Pending = { id: string; name: string; size: string; progress: number; done: boolean };
+type UploadStatus = "uploading" | "done" | "failed";
 
-export function UploadDialog({ children }: { children: React.ReactNode }) {
+type Pending = {
+  id: string;
+  name: string;
+  size: string;
+  progress: number;
+  status: UploadStatus;
+  error?: string;
+};
+
+type UploadDialogProps = {
+  children: React.ReactNode;
+  onUploaded?: () => void;
+};
+
+export function UploadDialog({ children, onUploaded }: Readonly<UploadDialogProps>) {
   const [open, setOpen] = React.useState(false);
   const [files, setFiles] = React.useState<Pending[]>([]);
   const [dragOver, setDragOver] = React.useState(false);
 
   const handleFiles = (list: FileList | null) => {
-    if (!list || !list.length) return;
+    if (!list?.length) return;
     const next: Pending[] = Array.from(list).map((f, i) => ({
       id: `${Date.now()}-${i}`,
       name: f.name,
       size: formatBytes(f.size),
-      progress: 0,
-      done: false,
+      progress: 12,
+      status: "uploading",
     }));
     setFiles((prev) => [...prev, ...next]);
-    next.forEach((file) => simulateUpload(file.id));
+    Array.from(list).forEach((file, index) => uploadFile(file, next[index]?.id));
   };
 
-  const simulateUpload = (id: string) => {
-    let p = 0;
-    const tick = () => {
-      p += Math.random() * 22 + 8;
-      if (p >= 100) {
-        setFiles((prev) =>
-          prev.map((f) => (f.id === id ? { ...f, progress: 100, done: true } : f)),
-        );
-        toast.success("Document uploaded", { description: "Indexing has started." });
-        return;
-      }
-      setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, progress: p } : f)));
-      setTimeout(tick, 280);
-    };
-    setTimeout(tick, 200);
+  const uploadFile = async (file: File, id: string | undefined) => {
+    if (!id) return;
+
+    try {
+      setFiles((prev) => prev.map((item) => (item.id === id ? { ...item, progress: 45 } : item)));
+      const response = await documentsService.upload(file);
+      setFiles((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, progress: 100, status: "done" } : item)),
+      );
+      toast.success("Document indexed", { description: response.data.document.fileName });
+      onUploaded?.();
+    } catch (error) {
+      const message = error instanceof ApiClientError ? error.message : "Document upload failed";
+      setFiles((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, progress: 100, status: "failed", error: message } : item,
+        ),
+      );
+      toast.error("Upload failed", { description: message });
+    }
   };
 
   return (
@@ -98,24 +119,27 @@ export function UploadDialog({ children }: { children: React.ReactNode }) {
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   <span className="flex-1 truncate text-sm">{f.name}</span>
                   <span className="text-xs text-muted-foreground">{f.size}</span>
-                  {f.done ? (
+                  {f.status === "done" ? (
                     <CheckCircle2 className="h-4 w-4 text-success" />
+                  ) : f.status === "failed" ? (
+                    <XCircle className="h-4 w-4 text-destructive" />
                   ) : (
-                    <button
-                      onClick={() => setFiles((prev) => prev.filter((x) => x.id !== f.id))}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   )}
                 </div>
                 <Progress value={f.progress} className="mt-2 h-1.5" />
+                {f.error && <p className="mt-2 text-xs text-destructive">{f.error}</p>}
               </div>
             ))}
           </div>
         )}
 
         <div className="flex justify-end gap-2 pt-2">
+          {files.length > 0 && (
+            <Button variant="ghost" onClick={() => setFiles([])}>
+              <X className="mr-1.5 h-4 w-4" /> Clear
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setOpen(false)}>
             Close
           </Button>

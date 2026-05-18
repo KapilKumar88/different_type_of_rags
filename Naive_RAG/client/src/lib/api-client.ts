@@ -30,16 +30,22 @@ async function parseResponse(response: Response): Promise<unknown> {
 export const apiClient = {
   async request<TResponse>(path: string, options: RequestOptions = {}): Promise<TResponse> {
     const headers = new Headers(options.headers);
+    const isFormData = options.body instanceof FormData;
 
-    if (options.body !== undefined && !headers.has("Content-Type")) {
+    if (options.body !== undefined && !isFormData && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
+
+    const body =
+      options.body === undefined || isFormData
+        ? (options.body as BodyInit | undefined)
+        : JSON.stringify(options.body);
 
     const response = await fetch(`${apiConfig.baseUrl}${path}`, {
       ...options,
       headers,
       credentials: "include",
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body,
     });
     const parsedResponse = await parseResponse(response);
 
@@ -64,5 +70,9 @@ export const apiClient = {
       method: "POST",
       body: payload,
     });
+  },
+
+  delete<TResponse>(path: string): Promise<TResponse> {
+    return this.request<TResponse>(path, { method: "DELETE" });
   },
 };

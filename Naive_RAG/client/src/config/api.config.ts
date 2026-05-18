@@ -8,5 +8,10 @@ export const apiConfig = {
       login: "/api/v1/auth/login",
       me: "/api/v1/auth/me",
     },
+    documents: {
+      upload: "/api/v1/documents/upload",
+      list: "/api/v1/documents",
+      delete: (id: string) => `/api/v1/documents/${id}`,
+    },
   },
 } as const;

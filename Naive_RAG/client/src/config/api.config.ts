@@ -13,5 +13,8 @@ export const apiConfig = {
       list: "/api/v1/documents",
       delete: (id: string) => `/api/v1/documents/${id}`,
     },
+    chat: {
+      ask: "/api/v1/chat/ask",
+    },
   },
 } as const;

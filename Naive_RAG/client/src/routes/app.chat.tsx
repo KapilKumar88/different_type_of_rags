@@ -1,19 +1,33 @@
 import * as React from "react";
-import { Send, Sparkles, Plus, Copy, RotateCcw, FileText, MessageSquarePlus } from "lucide-react";
+import { Send, Sparkles, Plus, Copy, FileText, MessageSquarePlus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Markdown } from "@/components/chat/markdown";
-import { mockChats, mockMessages, suggestedPrompts, type Message } from "@/lib/mock/data";
 import { usePageMeta } from "@/hooks/use-page-meta";
+import { ApiClientError } from "@/lib/api-client";
+import { chatService } from "@/services/chat.service";
+import type { SourceChunk } from "@/types/chat.types";
 import { toast } from "sonner";
+
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  sources?: SourceChunk[];
+};
+
+const suggestedPrompts = [
+  "Summarize the uploaded document in 5 bullets",
+  "What are the main facts in this document?",
+  "Which details answer my question?",
+  "What information is missing from the document?",
+];
 
 export function ChatPage() {
   usePageMeta("Chat - RAG Assistant");
-  const [activeChat, setActiveChat] = React.useState<string | null>("c1");
-  const [messages, setMessages] = React.useState<Message[]>(mockMessages);
+  const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [input, setInput] = React.useState("");
   const [thinking, setThinking] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -22,83 +36,68 @@ export function ChatPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, thinking]);
 
-  const send = (text?: string) => {
+  const send = async (text?: string) => {
     const content = (text ?? input).trim();
-    if (!content) return;
-    const userMsg: Message = { id: `u-${Date.now()}`, role: "user", content };
-    setMessages((m) => [...m, userMsg]);
+
+    if (!content || thinking) {
+      return;
+    }
+
+    const userMsg: ChatMessage = {
+      id: `u-${Date.now()}`,
+      role: "user",
+      content,
+    };
+    setMessages((current) => [...current, userMsg]);
     setInput("");
     setThinking(true);
-    setTimeout(() => {
-      setMessages((m) => [
-        ...m,
-        {
-          id: `a-${Date.now()}`,
-          role: "assistant",
-          content:
-            "Here's what I found in your documents:\n\n- The relevant policy is detailed in **section 3.4**.\n- Eligibility is based on **tenure** and **employment type**.\n- Approval typically takes **3–5 business days**.\n\nLet me know if you'd like me to dig deeper into any specific aspect.",
-          sources: ["employee-policy.pdf · p.12", "onboarding-guide.pdf · p.4"],
-        },
-      ]);
+
+    try {
+      const response = await chatService.ask({ question: content });
+      const assistantMsg: ChatMessage = {
+        id: `a-${Date.now()}`,
+        role: "assistant",
+        content: response.data.answer,
+        sources: response.data.sources,
+      };
+      setMessages((current) => [...current, assistantMsg]);
+    } catch (error) {
+      const message = error instanceof ApiClientError ? error.message : "Unable to ask question";
+      toast.error("Question failed", { description: message });
+    } finally {
       setThinking(false);
-    }, 1200);
+    }
   };
 
   const startNew = () => {
-    setActiveChat(null);
     setMessages([]);
+    setInput("");
   };
 
-  const totalTokens = messages.length * 312;
   const isEmpty = messages.length === 0;
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] min-h-0 w-full">
-      {/* Conversation rail */}
       <aside className="hidden w-72 shrink-0 flex-col border-r border-border bg-sidebar/40 lg:flex">
         <div className="border-b border-border p-3">
           <Button onClick={startNew} variant="outline" className="w-full justify-start gap-2">
             <Plus className="h-4 w-4" /> New chat
           </Button>
         </div>
-        <ScrollArea className="flex-1">
-          <div className="p-2">
-            <div className="px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Recent
-            </div>
-            {mockChats.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => {
-                  setActiveChat(c.id);
-                  setMessages(mockMessages);
-                }}
-                className={`flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-2 text-left text-sm transition-colors ${
-                  activeChat === c.id
-                    ? "bg-accent text-accent-foreground"
-                    : "hover:bg-muted text-foreground"
-                }`}
-              >
-                <span className="line-clamp-1 font-medium">{c.title}</span>
-                <span className="text-xs text-muted-foreground">
-                  {c.updatedAt} · {c.tokens.toLocaleString()} tokens
-                </span>
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
+        <div className="p-4 text-sm text-muted-foreground">
+          Ask questions against the chunks retrieved from Qdrant for this simple Naive RAG flow.
+        </div>
       </aside>
 
-      {/* Main chat */}
       <div className="flex min-w-0 flex-1 flex-col">
         {isEmpty ? (
-          <EmptyState onPrompt={(p) => send(p)} />
+          <EmptyState onPrompt={(prompt) => send(prompt)} disabled={thinking} />
         ) : (
           <div ref={scrollRef} className="flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:py-8">
               <div className="space-y-6">
-                {messages.map((m) => (
-                  <MessageRow key={m.id} message={m} />
+                {messages.map((message) => (
+                  <MessageRow key={message.id} message={message} />
                 ))}
                 {thinking && <ThinkingRow />}
               </div>
@@ -106,18 +105,18 @@ export function ChatPage() {
           </div>
         )}
 
-        {/* Composer */}
         <div className="border-t border-border bg-background/80 p-3 backdrop-blur sm:p-4">
           <div className="mx-auto w-full max-w-3xl">
             {!isEmpty && messages.length < 6 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
-                {suggestedPrompts.slice(0, 3).map((p) => (
+                {suggestedPrompts.slice(0, 3).map((prompt) => (
                   <button
-                    key={p}
-                    onClick={() => send(p)}
-                    className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    key={prompt}
+                    onClick={() => send(prompt)}
+                    disabled={thinking}
+                    className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {p}
+                    {prompt}
                   </button>
                 ))}
               </div>
@@ -125,21 +124,21 @@ export function ChatPage() {
             <div className="rounded-2xl border border-border bg-card p-2 shadow-sm focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/15">
               <Textarea
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
                     send();
                   }
                 }}
-                placeholder="Ask anything about your documents..."
+                placeholder="Ask anything about your uploaded documents..."
                 className="min-h-[44px] resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
                 rows={1}
               />
               <div className="flex items-center justify-between gap-2 px-1">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Sparkles className="h-3 w-3" />
-                  gpt-4o-mini · Tokens used: {totalTokens.toLocaleString()}
+                  Ollama · top 5 chunks
                 </div>
                 <Button
                   size="sm"
@@ -147,12 +146,17 @@ export function ChatPage() {
                   disabled={!input.trim() || thinking}
                   className="gap-1.5"
                 >
-                  <Send className="h-3.5 w-3.5" /> Send
+                  {thinking ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                  Send
                 </Button>
               </div>
             </div>
             <p className="mt-2 text-center text-[11px] text-muted-foreground">
-              Responses are generated from your indexed documents. Always verify important info.
+              Responses are generated from retrieved source chunks only.
             </p>
           </div>
         </div>
@@ -161,8 +165,9 @@ export function ChatPage() {
   );
 }
 
-function MessageRow({ message }: { message: Message }) {
+function MessageRow({ message }: Readonly<{ message: ChatMessage }>) {
   const isUser = message.role === "user";
+
   return (
     <div className={`group flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
       <Avatar className="h-8 w-8 shrink-0">
@@ -177,7 +182,7 @@ function MessageRow({ message }: { message: Message }) {
         </AvatarFallback>
       </Avatar>
       <div
-        className={`max-w-[85%] space-y-2 ${isUser ? "items-end" : "items-start"} flex flex-col`}
+        className={`flex max-w-[85%] flex-col space-y-2 ${isUser ? "items-end" : "items-start"}`}
       >
         <div
           className={`rounded-2xl px-4 py-2.5 text-sm ${
@@ -192,16 +197,8 @@ function MessageRow({ message }: { message: Message }) {
             <Markdown>{message.content}</Markdown>
           )}
         </div>
-        {message.sources && message.sources.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Sources:</span>
-            {message.sources.map((s) => (
-              <Badge key={s} variant="secondary" className="gap-1 font-normal">
-                <FileText className="h-3 w-3" />
-                {s}
-              </Badge>
-            ))}
-          </div>
+        {!isUser && message.sources && message.sources.length > 0 && (
+          <SourceChunks sources={message.sources} />
         )}
         {!isUser && (
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -216,15 +213,39 @@ function MessageRow({ message }: { message: Message }) {
             >
               <Copy className="h-3 w-3" /> Copy
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-            >
-              <RotateCcw className="h-3 w-3" /> Regenerate
-            </Button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function SourceChunks({ sources }: Readonly<{ sources: SourceChunk[] }>) {
+  return (
+    <div className="w-full space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs text-muted-foreground">Retrieved chunks:</span>
+        {sources.map((source) => (
+          <Badge key={source.chunkId} variant="secondary" className="gap-1 font-normal">
+            <FileText className="h-3 w-3" />
+            {source.fileName}
+            {source.pageNumber ? ` · p.${source.pageNumber}` : ""}
+            {` · ${source.score.toFixed(3)}`}
+          </Badge>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {sources.map((source, index) => (
+          <details key={source.chunkId} className="rounded-lg border border-border bg-muted/30 p-3">
+            <summary className="cursor-pointer text-xs font-medium text-foreground">
+              Source {index + 1}: {source.fileName}
+              {source.pageNumber ? ` · page ${source.pageNumber}` : ""}
+            </summary>
+            <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+              {source.text}
+            </p>
+          </details>
+        ))}
       </div>
     </div>
   );
@@ -256,7 +277,13 @@ function ThinkingRow() {
   );
 }
 
-function EmptyState({ onPrompt }: { onPrompt: (p: string) => void }) {
+function EmptyState({
+  onPrompt,
+  disabled,
+}: Readonly<{
+  onPrompt: (prompt: string) => void;
+  disabled: boolean;
+}>) {
   return (
     <div className="flex flex-1 items-center justify-center px-4">
       <div className="w-full max-w-2xl text-center">
@@ -267,16 +294,17 @@ function EmptyState({ onPrompt }: { onPrompt: (p: string) => void }) {
           Start a new conversation
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Upload documents and start asking questions.
+          Ask a question after uploading and indexing documents.
         </p>
         <div className="mt-6 grid gap-2 sm:grid-cols-2">
-          {suggestedPrompts.map((p) => (
+          {suggestedPrompts.map((prompt) => (
             <button
-              key={p}
-              onClick={() => onPrompt(p)}
-              className="rounded-xl border border-border bg-card p-3 text-left text-sm text-foreground transition-all hover:border-primary/40 hover:bg-accent/40 hover:shadow-sm"
+              key={prompt}
+              disabled={disabled}
+              onClick={() => onPrompt(prompt)}
+              className="rounded-xl border border-border bg-card p-3 text-left text-sm text-foreground transition-all hover:border-primary/40 hover:bg-accent/40 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {p}
+              {prompt}
             </button>
           ))}
         </div>

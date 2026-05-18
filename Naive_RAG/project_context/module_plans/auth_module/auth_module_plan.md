@@ -25,8 +25,8 @@ Module scope is limited to:
 | Task 02: Server Foundation | [task_02.md](task_02.md) | Approved | User approved the server foundation. |
 | Task 03: Server Auth API | [task_03.md](task_03.md) | Approved | User approved the server auth API. |
 | Task 04: Server Auth Guard | [task_04.md](task_04.md) | Approved | User approved the server auth guard. |
-| Task 05: Client Auth Infrastructure | [task_05.md](task_05.md) | Review | Added client env/API config, shared API client with credentials include, auth service, auth types, validation schemas, Zustand auth store, QueryClient provider, and Zustand dependency. Build passed; lint has only pre-existing warnings. |
-| Task 06: Login Flow | [task_06.md](task_06.md) | Pending | Start only after Task 05 approval. |
+| Task 05: Client Auth Infrastructure | [task_05.md](task_05.md) | Approved | User approved the client auth infrastructure. |
+| Task 06: Login Flow | [task_06.md](task_06.md) | Review | Replaced mock login with validated authService.login mutation, auth store update, success navigation, error toast, field validation messages, and pending button state. Build passed; lint has only pre-existing warnings. |
 | Task 07: Registration Flow | [task_07.md](task_07.md) | Pending | Start only after Task 06 approval. |
 | Task 08: Client Auth Guard | [task_08.md](task_08.md) | Pending | Start only after Task 07 approval. |
 
@@ -55,4 +55,5 @@ Module scope is limited to:
 - Task 02 is approved.
 - Task 03 is approved.
 - Task 04 is approved.
-- Task 05 is ready for review.
+- Task 05 is approved.
+- Task 06 is ready for review.

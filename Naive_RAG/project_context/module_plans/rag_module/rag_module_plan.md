@@ -34,8 +34,8 @@ Out of scope for this version:
 | --- | --- | --- | --- |
 | Task 01: Planning and Task Files | [task_01.md](task_01.md) | Approved | User reviewed the plan and approved proceeding to Task 02. |
 | Task 02: Server RAG Foundation | [task_02.md](task_02.md) | Approved | User reviewed and approved proceeding to Task 03. |
-| Task 03: Server Infrastructure Services | [task_03.md](task_03.md) | Review | Qdrant, embeddings, and LLM modules compile; LangGraph scan is clean. |
-| Task 04: Documents API and Ingestion Flow | [task_04.md](task_04.md) | Pending | Upload, extraction, chunking, vector upsert, list, and delete. |
+| Task 03: Server Infrastructure Services | [task_03.md](task_03.md) | Approved | User reviewed and approved proceeding to Task 04. |
+| Task 04: Documents API and Ingestion Flow | [task_04.md](task_04.md) | Review | Upload, extraction, chunking, vector upsert, list, delete, build, and tests completed. |
 | Task 05: Chat API Retrieval Flow | [task_05.md](task_05.md) | Pending | Question embedding, top-5 retrieval, prompt building, and answer generation. |
 | Task 06: Client Document Integration | [task_06.md](task_06.md) | Pending | Document service, upload dialog, documents table, and deletion. |
 | Task 07: Client Chat Integration | [task_07.md](task_07.md) | Pending | Chat service, real ask flow, answer rendering, and source chunks. |
@@ -67,4 +67,5 @@ Out of scope for this version:
 
 - Task 01 is approved.
 - Task 02 is approved.
-- Task 03 is ready for review.
+- Task 03 is approved.
+- Task 04 is ready for review.

@@ -28,7 +28,7 @@ Module scope is limited to:
 | Task 05: Client Auth Infrastructure | [task_05.md](task_05.md) | Approved | User approved the client auth infrastructure. |
 | Task 06: Login Flow | [task_06.md](task_06.md) | Approved | User approved the login flow. |
 | Task 07: Registration Flow | [task_07.md](task_07.md) | Approved | User approved the registration flow. |
-| Task 08: Client Auth Guard | [task_08.md](task_08.md) | Review | Added AuthGuard, GuestGuard, session verification through /api/v1/auth/me, protected /app routing, authenticated guest redirects, and loading state. Build passed; lint has only pre-existing warnings. |
+| Task 08: Client Auth Guard | [task_08.md](task_08.md) | Approved | User approved the client auth guard. |
 
 ## Key Decisions
 
@@ -58,4 +58,5 @@ Module scope is limited to:
 - Task 05 is approved.
 - Task 06 is approved.
 - Task 07 is approved.
-- Task 08 is ready for final auth module review.
+- Task 08 is approved.
+- Authentication module is complete.

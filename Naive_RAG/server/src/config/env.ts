@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 const defaultDatabaseUrl =
-  'postgresql://username:password@localhost:5432/rag_naive_rag';
+  'postgresql://postgres:password@localhost:5432/rag_naive_rag';
 const defaultJwtSecret = 'development-only-auth-secret-change-me';
 
 const envSchema = z

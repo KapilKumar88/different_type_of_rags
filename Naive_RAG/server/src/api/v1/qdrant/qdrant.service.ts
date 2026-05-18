@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { QdrantClient } from '@qdrant/js-client-rest';
+import type { Schemas } from '@qdrant/js-client-rest';
 import { qdrantConfig } from '../../../config/qdrant.config';
 import type {
   ChunkPayload,
@@ -7,14 +8,8 @@ import type {
   VectorPoint,
 } from '../../../types/rag.types';
 
-type QdrantPayloadValue = string | number | boolean | null;
-
-type QdrantPayload = Record<string, QdrantPayloadValue | QdrantPayloadValue[]>;
-
-type ScoredPointPayload = {
-  payload?: QdrantPayload | null;
-  score: number;
-};
+type QdrantPayload = Schemas['Payload'];
+type ScoredPointPayload = Schemas['ScoredPoint'];
 
 @Injectable()
 export class QdrantService {
@@ -67,7 +62,7 @@ export class QdrantService {
     });
 
     return results
-      .map((result) => this.toRetrievedChunk(result as ScoredPointPayload))
+      .map((result) => this.toRetrievedChunk(result))
       .filter((chunk): chunk is RetrievedChunk => chunk !== null);
   }
 

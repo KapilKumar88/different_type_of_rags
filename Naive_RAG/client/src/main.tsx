@@ -2,6 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
+import { AuthGuard } from "@/guard/auth-guard";
+import { GuestGuard } from "@/guard/guest-guard";
 import { AppLayout } from "@/routes/app";
 import { ChatPage } from "@/routes/app.chat";
 import { DocumentsPage } from "@/routes/app.documents";
@@ -21,19 +23,29 @@ const router = createBrowserRouter([
     errorElement: <NotFoundPage />,
     children: [
       { path: "/", element: <Navigate to="/login" replace /> },
-      { path: "/login", element: <LoginPage /> },
-      { path: "/register", element: <RegisterPage /> },
+      {
+        element: <GuestGuard />,
+        children: [
+          { path: "/login", element: <LoginPage /> },
+          { path: "/register", element: <RegisterPage /> },
+        ],
+      },
       { path: "/forgot-password", element: <ForgotPasswordPage /> },
       { path: "/reset-password", element: <ResetPasswordPage /> },
       {
-        path: "/app",
-        element: <AppLayout />,
+        element: <AuthGuard />,
         children: [
-          { index: true, element: <Navigate to="/app/chat" replace /> },
-          { path: "chat", element: <ChatPage /> },
-          { path: "documents", element: <DocumentsPage /> },
-          { path: "usage", element: <UsagePage /> },
-          { path: "settings", element: <SettingsPage /> },
+          {
+            path: "/app",
+            element: <AppLayout />,
+            children: [
+              { index: true, element: <Navigate to="/app/chat" replace /> },
+              { path: "chat", element: <ChatPage /> },
+              { path: "documents", element: <DocumentsPage /> },
+              { path: "usage", element: <UsagePage /> },
+              { path: "settings", element: <SettingsPage /> },
+            ],
+          },
         ],
       },
       { path: "*", element: <NotFoundPage /> },

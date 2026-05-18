@@ -38,8 +38,8 @@ Out of scope for this version:
 | Task 04: Documents API and Ingestion Flow | [task_04.md](task_04.md) | Approved | User reviewed and approved proceeding to Task 05. |
 | Task 05: Chat API Retrieval Flow | [task_05.md](task_05.md) | Approved | User reviewed and approved proceeding to Task 06. |
 | Task 06: Client Document Integration | [task_06.md](task_06.md) | Approved | User reviewed and approved proceeding to Task 07. |
-| Task 07: Client Chat Integration | [task_07.md](task_07.md) | Review | Chat service, real ask flow, answer rendering, source chunks, and build completed. |
-| Task 08: Verification and Context Update | [task_08.md](task_08.md) | Pending | Builds/tests, manual acceptance notes, and project reference update. |
+| Task 07: Client Chat Integration | [task_07.md](task_07.md) | Approved | User reviewed and approved proceeding to Task 08. |
+| Task 08: Verification and Context Update | [task_08.md](task_08.md) | Approved | Final builds/tests passed; manual runtime blockers and project reference update recorded. |
 
 ## Key Decisions
 
@@ -71,4 +71,5 @@ Out of scope for this version:
 - Task 04 is approved.
 - Task 05 is approved.
 - Task 06 is approved.
-- Task 07 is ready for review.
+- Task 07 is approved.
+- Task 08 is ready for review.

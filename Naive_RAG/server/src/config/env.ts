@@ -24,6 +24,13 @@ const envSchema = z
     AUTH_COOKIE_SECURE: z.coerce.boolean().default(false),
     AUTH_COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
     AUTH_COOKIE_DOMAIN: z.string().optional(),
+    QDRANT_URL: z.url().default('http://localhost:6333'),
+    QDRANT_COLLECTION: z.string().min(1).default('documents'),
+    QDRANT_VECTOR_SIZE: z.coerce.number().int().positive().default(768),
+    OLLAMA_BASE_URL: z.url().default('http://localhost:11434'),
+    OLLAMA_EMBEDDING_MODEL: z.string().min(1).default('nomic-embed-text:v1.5'),
+    OLLAMA_LLM_MODEL: z.string().min(1).default('minimax-m2.5:cloud'),
+    RAG_TOP_K: z.coerce.number().int().positive().default(5),
   })
   .superRefine((env, context) => {
     if (env.NODE_ENV !== 'production') {

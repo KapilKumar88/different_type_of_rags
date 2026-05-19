@@ -60,6 +60,7 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  createdAt?: string;
   sources?: SourceChunk[];
   pending?: boolean;
 };
@@ -395,6 +396,7 @@ export function ChatPage() {
         id: pendingId,
         role: "assistant",
         content: "",
+        createdAt: new Date().toISOString(),
         sources: [],
         pending: true,
       };
@@ -658,8 +660,54 @@ function toChatMessage(message: ConversationMessage): ChatMessage {
     id: message.id,
     role: message.role,
     content: message.content,
+    createdAt: message.createdAt,
     sources: message.sources ?? undefined,
   };
+}
+
+function formatRelativeTime(value: string | undefined): string {
+  if (!value) {
+    return "Just now";
+  }
+
+  const timestamp = new Date(value).getTime();
+
+  if (Number.isNaN(timestamp)) {
+    return "Just now";
+  }
+
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+
+  if (elapsedSeconds < 60) {
+    return "Just now";
+  }
+
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+
+  if (elapsedMinutes < 60) {
+    return formatRelativeUnit(elapsedMinutes, "minute");
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+
+  if (elapsedHours < 24) {
+    return formatRelativeUnit(elapsedHours, "hour");
+  }
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+
+  if (elapsedDays < 30) {
+    return formatRelativeUnit(elapsedDays, "day");
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
+}
+
+function formatRelativeUnit(value: number, unit: string): string {
+  return `${value} ${unit}${value === 1 ? "" : "s"} ago`;
 }
 
 function getGeneratedConversationTitle(documents: RagDocument[], selectedCount: number): string {
@@ -1057,6 +1105,9 @@ function MessageRow({ message }: Readonly<{ message: ChatMessage }>) {
         {!isUser && message.sources && message.sources.length > 0 && (
           <SourceChunks sources={message.sources} />
         )}
+        <span className="px-1 text-[11px] text-muted-foreground">
+          {formatRelativeTime(message.createdAt)}
+        </span>
         {!isUser && !message.pending && (
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <Button
@@ -1129,10 +1180,45 @@ function StreamingDots() {
 
 function LoadingConversation() {
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <div className="text-center text-sm text-muted-foreground">
-        <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin" />
-        Loading conversation...
+    <div className="flex-1 overflow-hidden">
+      <div className="mx-auto w-full px-4 py-6 sm:py-8">
+        <div className="mb-6 border-b border-border pb-4">
+          <div className="h-6 w-56 animate-pulse rounded bg-muted" />
+          <div className="mt-3 flex gap-1.5">
+            <div className="h-6 w-24 animate-pulse rounded-full bg-muted" />
+            <div className="h-6 w-32 animate-pulse rounded-full bg-muted" />
+          </div>
+        </div>
+        <div className="space-y-6">
+          <MessageSkeleton align="left" widthClass="w-[72%]" />
+          <MessageSkeleton align="right" widthClass="w-[48%]" />
+          <MessageSkeleton align="left" widthClass="w-[64%]" />
+          <MessageSkeleton align="right" widthClass="w-[58%]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MessageSkeleton({
+  align,
+  widthClass,
+}: Readonly<{
+  align: "left" | "right";
+  widthClass: string;
+}>) {
+  const isRightAligned = align === "right";
+
+  return (
+    <div className={`flex w-full gap-3 ${isRightAligned ? "flex-row-reverse" : ""}`}>
+      <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-muted" />
+      <div
+        className={`flex w-full max-w-[85%] flex-col gap-2 ${
+          isRightAligned ? "items-end" : "items-start"
+        }`}
+      >
+        <div className={`h-12 ${widthClass} min-w-40 animate-pulse rounded-2xl bg-muted`} />
+        <div className="h-3 w-20 animate-pulse rounded bg-muted" />
       </div>
     </div>
   );

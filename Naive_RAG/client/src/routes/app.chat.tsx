@@ -12,6 +12,7 @@ import {
   Plus,
   Send,
   Sparkles,
+  Square,
   Trash2,
   X,
 } from "lucide-react";
@@ -97,6 +98,9 @@ export function ChatPage() {
   const [scopeDialogOpen, setScopeDialogOpen] = React.useState(false);
   const [scopeDocumentIds, setScopeDocumentIds] = React.useState<string[]>([]);
   const streamCleanupRef = React.useRef<(() => void) | null>(null);
+  const activeStreamIdRef = React.useRef<number | null>(null);
+  const streamSequenceRef = React.useRef(0);
+  const pendingAssistantIdRef = React.useRef<string | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const conversationsQuery = useQuery({
@@ -193,7 +197,39 @@ export function ChatPage() {
   const closeStream = () => {
     streamCleanupRef.current?.();
     streamCleanupRef.current = null;
+    activeStreamIdRef.current = null;
+    pendingAssistantIdRef.current = null;
     setStreaming(false);
+  };
+
+  const stopGenerating = () => {
+    const pendingId = pendingAssistantIdRef.current;
+
+    streamCleanupRef.current?.();
+    streamCleanupRef.current = null;
+    activeStreamIdRef.current = null;
+    pendingAssistantIdRef.current = null;
+    setStreaming(false);
+
+    if (!pendingId) {
+      return;
+    }
+
+    setMessages((current) =>
+      current.map((message) => {
+        if (message.id !== pendingId) {
+          return message;
+        }
+
+        const stoppedContent = message.content ? `${message.content}\n\n[stopped]` : "[stopped]";
+
+        return {
+          ...message,
+          content: stoppedContent,
+          pending: false,
+        };
+      }),
+    );
   };
 
   const startNew = () => {
@@ -364,12 +400,20 @@ export function ChatPage() {
       };
 
       setMessages((current) => [...current, userMessage, pendingAssistant]);
+      const streamId = streamSequenceRef.current + 1;
+      streamSequenceRef.current = streamId;
+      activeStreamIdRef.current = streamId;
+      pendingAssistantIdRef.current = pendingId;
 
       streamCleanupRef.current = chatService.streamMessage(
         activeConversationId,
         response.data.message.id,
         {
           onSources: ({ sources }) => {
+            if (activeStreamIdRef.current !== streamId) {
+              return;
+            }
+
             setMessages((current) =>
               current.map((message) =>
                 message.id === pendingId ? { ...message, sources } : message,
@@ -377,6 +421,10 @@ export function ChatPage() {
             );
           },
           onToken: ({ token }) => {
+            if (activeStreamIdRef.current !== streamId) {
+              return;
+            }
+
             setMessages((current) =>
               current.map((message) =>
                 message.id === pendingId
@@ -386,6 +434,10 @@ export function ChatPage() {
             );
           },
           onDone: ({ message }) => {
+            if (activeStreamIdRef.current !== streamId) {
+              return;
+            }
+
             setMessages((current) =>
               current.map((currentMessage) =>
                 currentMessage.id === pendingId ? toChatMessage(message) : currentMessage,
@@ -393,16 +445,24 @@ export function ChatPage() {
             );
             setStreaming(false);
             streamCleanupRef.current = null;
+            activeStreamIdRef.current = null;
+            pendingAssistantIdRef.current = null;
             queryClient.invalidateQueries({ queryKey: conversationsQueryKey });
             queryClient.invalidateQueries({
               queryKey: ["chat", "conversation", activeConversationId],
             });
           },
           onError: ({ message }) => {
+            if (activeStreamIdRef.current !== streamId) {
+              return;
+            }
+
             toast.error("Response failed", { description: message });
             setMessages((current) => current.filter((item) => item.id !== pendingId));
             setStreaming(false);
             streamCleanupRef.current = null;
+            activeStreamIdRef.current = null;
+            pendingAssistantIdRef.current = null;
           },
         },
       );
@@ -539,16 +599,23 @@ export function ChatPage() {
                 </div>
                 <Button
                   size="sm"
-                  onClick={() => send()}
-                  disabled={sendDisabled}
+                  onClick={() => {
+                    if (streaming) {
+                      stopGenerating();
+                      return;
+                    }
+
+                    void send();
+                  }}
+                  disabled={streaming ? false : sendDisabled}
                   className="gap-1.5"
                 >
                   {streaming ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Square className="h-3.5 w-3.5 fill-current" />
                   ) : (
                     <Send className="h-3.5 w-3.5" />
                   )}
-                  Send
+                  {streaming ? "Stop" : "Send"}
                 </Button>
               </div>
             </div>

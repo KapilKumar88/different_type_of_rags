@@ -1,6 +1,7 @@
 import { ragConfig } from '../../../config/rag.config';
 import type { ConversationMessage } from '../../../database/schemas';
 import type { RetrievedChunk } from '../../../types/rag.types';
+import { DocumentsService } from '../documents/documents.service';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { LlmService } from '../llm/llm.service';
 import { QdrantService } from '../qdrant/qdrant.service';
@@ -24,6 +25,7 @@ describe('ChatService', () => {
   let qdrantService: jest.Mocked<QdrantService>;
   let llmService: jest.Mocked<LlmService>;
   let chatRepository: jest.Mocked<ChatRepository>;
+  let documentsService: jest.Mocked<DocumentsService>;
   let chatService: ChatService;
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const updatedAt = new Date('2026-01-01T00:00:00.000Z');
@@ -34,6 +36,7 @@ describe('ChatService', () => {
     } as unknown as jest.Mocked<EmbeddingsService>;
     qdrantService = {
       search: jest.fn(),
+      searchByDocumentIds: jest.fn(),
     } as unknown as jest.Mocked<QdrantService>;
     llmService = {
       generateAnswer: jest.fn(),
@@ -45,11 +48,15 @@ describe('ChatService', () => {
       findMessagesByConversation: jest.fn(),
       createMessage: jest.fn(),
     } as unknown as jest.Mocked<ChatRepository>;
+    documentsService = {
+      findByIds: jest.fn(),
+    } as unknown as jest.Mocked<DocumentsService>;
     chatService = new ChatService(
       embeddingsService,
       qdrantService,
       llmService,
       chatRepository,
+      documentsService,
     );
   });
 
@@ -121,6 +128,26 @@ describe('ChatService', () => {
       updatedAt,
       documentIds: ['document-1', 'document-2'],
     };
+    documentsService.findByIds.mockResolvedValue([
+      {
+        id: 'document-1',
+        fileName: 'one.txt',
+        mimeType: 'text/plain',
+        sizeBytes: 10,
+        chunkCount: 1,
+        createdAt,
+        updatedAt,
+      },
+      {
+        id: 'document-2',
+        fileName: 'two.txt',
+        mimeType: 'text/plain',
+        sizeBytes: 10,
+        chunkCount: 1,
+        createdAt,
+        updatedAt,
+      },
+    ]);
     chatRepository.createConversation.mockResolvedValue(conversation);
 
     const result = await chatService.createConversation('user-1', {
@@ -138,6 +165,77 @@ describe('ChatService', () => {
     expect(result).toEqual(conversation);
   });
 
+  it('deduplicates selected document ids before creating a conversation', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1', 'document-2'],
+    };
+    documentsService.findByIds.mockResolvedValue([
+      {
+        id: 'document-1',
+        fileName: 'one.txt',
+        mimeType: 'text/plain',
+        sizeBytes: 10,
+        chunkCount: 1,
+        createdAt,
+        updatedAt,
+      },
+      {
+        id: 'document-2',
+        fileName: 'two.txt',
+        mimeType: 'text/plain',
+        sizeBytes: 10,
+        chunkCount: 1,
+        createdAt,
+        updatedAt,
+      },
+    ]);
+    chatRepository.createConversation.mockResolvedValue(conversation);
+
+    await chatService.createConversation('user-1', {
+      title: 'Project docs',
+      documentIds: ['document-1', 'document-2', 'document-1'],
+    });
+
+    expect(documentsService.findByIds).toHaveBeenCalledWith([
+      'document-1',
+      'document-2',
+    ]);
+    expect(chatRepository.createConversation).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        title: 'Project docs',
+      },
+      ['document-1', 'document-2'],
+    );
+  });
+
+  it('rejects missing selected documents before creating a conversation', async () => {
+    documentsService.findByIds.mockResolvedValue([
+      {
+        id: 'document-1',
+        fileName: 'one.txt',
+        mimeType: 'text/plain',
+        sizeBytes: 10,
+        chunkCount: 1,
+        createdAt,
+        updatedAt,
+      },
+    ]);
+
+    await expect(
+      chatService.createConversation('user-1', {
+        title: 'Project docs',
+        documentIds: ['document-1', 'document-2'],
+      }),
+    ).rejects.toThrow('One or more selected documents were not found');
+    expect(chatRepository.createConversation).not.toHaveBeenCalled();
+  });
+
   it('uses a default title when creating a conversation without one', async () => {
     const conversation = {
       id: 'conversation-1',
@@ -147,6 +245,17 @@ describe('ChatService', () => {
       updatedAt,
       documentIds: ['document-1'],
     };
+    documentsService.findByIds.mockResolvedValue([
+      {
+        id: 'document-1',
+        fileName: 'one.txt',
+        mimeType: 'text/plain',
+        sizeBytes: 10,
+        chunkCount: 1,
+        createdAt,
+        updatedAt,
+      },
+    ]);
     chatRepository.createConversation.mockResolvedValue(conversation);
 
     await chatService.createConversation('user-1', {
@@ -256,5 +365,40 @@ describe('ChatService', () => {
       content: 'Summarize this.',
     });
     expect(result).toEqual(message);
+  });
+
+  it('retrieves conversation answer context using stored document ids', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1', 'document-2'],
+    };
+    const questionVector = Array(768).fill(0.3);
+    const sources = [
+      createChunk({ documentId: 'document-1' }),
+      createChunk({ chunkId: 'chunk-2', documentId: 'document-2' }),
+    ];
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    embeddingsService.embedQuery.mockResolvedValue(questionVector);
+    qdrantService.searchByDocumentIds.mockResolvedValue(sources);
+
+    const result = await chatService.getConversationAnswerContext(
+      'user-1',
+      'conversation-1',
+      'What does this say?',
+    );
+
+    expect(qdrantService.searchByDocumentIds).toHaveBeenCalledWith(
+      questionVector,
+      ragConfig.topK,
+      ['document-1', 'document-2'],
+    );
+    expect(result).toEqual({
+      conversation,
+      sources,
+    });
   });
 });

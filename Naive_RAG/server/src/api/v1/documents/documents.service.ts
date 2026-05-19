@@ -109,6 +109,10 @@ export class DocumentsService {
     return this.documentsRepository.findAll();
   }
 
+  findByIds(ids: string[]): Promise<Document[]> {
+    return this.documentsRepository.findByIds(ids);
+  }
+
   async delete(id: string): Promise<Document> {
     const document = await this.documentsRepository.findById(id);
 

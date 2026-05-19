@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ragConfig } from '../../../config/rag.config';
 import type { ConversationMessage } from '../../../database/schemas';
 import type { RetrievedChunk } from '../../../types/rag.types';
+import { DocumentsService } from '../documents/documents.service';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { LlmService } from '../llm/llm.service';
 import { QdrantService } from '../qdrant/qdrant.service';
@@ -24,6 +29,11 @@ export type ConversationDetails = ConversationWithDocumentIds & {
   messages: ConversationMessage[];
 };
 
+export type ConversationAnswerContext = {
+  conversation: ConversationWithDocumentIds;
+  sources: RetrievedChunk[];
+};
+
 const promptTemplate = `You are a helpful assistant. Answer the user's question using only the provided context. If the answer is not available in the context, say: I could not find this information in the uploaded document.
 
 Context:
@@ -41,22 +51,25 @@ export class ChatService {
     private readonly qdrantService: QdrantService,
     private readonly llmService: LlmService,
     private readonly chatRepository: ChatRepository,
+    private readonly documentsService: DocumentsService,
   ) {}
 
   listConversations(userId: string): Promise<ConversationSummary[]> {
     return this.chatRepository.findConversationsByUser(userId);
   }
 
-  createConversation(
+  async createConversation(
     userId: string,
     dto: CreateConversationDto,
   ): Promise<ConversationSummary> {
+    const documentIds = await this.validateSelectedDocuments(dto.documentIds);
+
     return this.chatRepository.createConversation(
       {
         userId,
         title: dto.title ?? 'New conversation',
       },
-      dto.documentIds,
+      documentIds,
     );
   }
 
@@ -89,6 +102,28 @@ export class ChatService {
       role: 'user',
       content: dto.content,
     });
+  }
+
+  async getConversationAnswerContext(
+    userId: string,
+    conversationId: string,
+    question: string,
+  ): Promise<ConversationAnswerContext> {
+    const conversation = await this.getOwnedConversation(
+      userId,
+      conversationId,
+    );
+    const questionVector = await this.embeddingsService.embedQuery(question);
+    const sources = await this.qdrantService.searchByDocumentIds(
+      questionVector,
+      ragConfig.topK,
+      conversation.documentIds,
+    );
+
+    return {
+      conversation,
+      sources,
+    };
   }
 
   async ask(dto: AskQuestionDto): Promise<AskQuestionResult> {
@@ -154,5 +189,25 @@ export class ChatService {
     }
 
     return conversation;
+  }
+
+  private async validateSelectedDocuments(
+    documentIds: string[],
+  ): Promise<string[]> {
+    const uniqueDocumentIds = [...new Set(documentIds)];
+
+    if (uniqueDocumentIds.length === 0) {
+      throw new BadRequestException('Select at least one document');
+    }
+
+    const documents = await this.documentsService.findByIds(uniqueDocumentIds);
+
+    if (documents.length !== uniqueDocumentIds.length) {
+      throw new BadRequestException(
+        'One or more selected documents were not found',
+      );
+    }
+
+    return uniqueDocumentIds;
   }
 }

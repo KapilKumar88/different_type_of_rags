@@ -14,7 +14,10 @@ type ScoredPointPayload = Schemas['ScoredPoint'];
 @Injectable()
 export class QdrantService {
   private readonly logger = new Logger(QdrantService.name);
-  private readonly client = new QdrantClient({ url: qdrantConfig.url });
+  private readonly client = new QdrantClient({
+    url: qdrantConfig.url,
+    checkCompatibility: false,
+  });
 
   async ensureCollection(): Promise<void> {
     const collection = await this.client.collectionExists(
@@ -64,6 +67,39 @@ export class QdrantService {
     return results
       .map((result) => this.toRetrievedChunk(result))
       .filter((chunk): chunk is RetrievedChunk => chunk !== null);
+  }
+
+  async searchByDocumentIds(
+    vector: number[],
+    limit: number,
+    documentIds: string[],
+  ): Promise<RetrievedChunk[]> {
+    if (documentIds.length === 0) {
+      return [];
+    }
+
+    await this.ensureCollection();
+    const results = await this.client.search(qdrantConfig.collectionName, {
+      vector,
+      limit,
+      filter: {
+        must: [
+          {
+            key: 'documentId',
+            match: { any: documentIds },
+          },
+        ],
+      },
+      with_payload: true,
+      with_vector: false,
+    });
+    const allowedDocumentIds = new Set(documentIds);
+
+    return results
+      .map((result) => this.toRetrievedChunk(result))
+      .filter((chunk): chunk is RetrievedChunk => {
+        return chunk !== null && allowedDocumentIds.has(chunk.documentId);
+      });
   }
 
   async deleteByDocumentId(documentId: string): Promise<void> {

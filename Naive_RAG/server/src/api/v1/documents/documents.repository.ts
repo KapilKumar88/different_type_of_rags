@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 import {
   documents,
   type Document,
@@ -35,6 +35,17 @@ export class DocumentsRepository {
       .limit(1);
 
     return document ?? null;
+  }
+
+  async findByIds(ids: string[]): Promise<Document[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return this.databaseService.instance
+      .select()
+      .from(documents)
+      .where(inArray(documents.id, ids));
   }
 
   async deleteById(id: string): Promise<Document | null> {

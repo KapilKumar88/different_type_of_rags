@@ -43,6 +43,7 @@ type ChatMessage = {
 
 const conversationsQueryKey = ["chat", "conversations"] as const;
 const documentsQueryKey = ["documents"] as const;
+const generatedTitleMaxLength = 40;
 
 const suggestedPrompts = [
   "Summarize the selected documents in 5 bullets",
@@ -117,10 +118,10 @@ export function ChatPage() {
       const selectedDocumentsForTitle = selectedDocumentIds
         .map((id) => documentMap.get(id))
         .filter((document): document is RagDocument => Boolean(document));
-      const title =
-        selectedDocumentsForTitle.length === 1
-          ? selectedDocumentsForTitle[0].fileName
-          : `${selectedDocumentsForTitle.length} documents`;
+      const title = getGeneratedConversationTitle(
+        selectedDocumentsForTitle,
+        selectedDocumentIds.length,
+      );
 
       return chatService.createConversation({
         title,
@@ -388,6 +389,43 @@ function toChatMessage(message: ConversationMessage): ChatMessage {
     content: message.content,
     sources: message.sources ?? undefined,
   };
+}
+
+function getGeneratedConversationTitle(documents: RagDocument[], selectedCount: number): string {
+  if (documents.length !== selectedCount || selectedCount === 0) {
+    return formatDocumentCountTitle(selectedCount);
+  }
+
+  if (documents.length === 1) {
+    return documents[0].fileName;
+  }
+
+  const compoundTitle = documents.map((document) => getFileBaseName(document.fileName)).join(" + ");
+
+  return truncateGeneratedTitle(compoundTitle);
+}
+
+function formatDocumentCountTitle(count: number): string {
+  return count === 1 ? "1 document" : `${count} documents`;
+}
+
+function getFileBaseName(fileName: string): string {
+  const trimmedFileName = fileName.trim();
+  const extensionIndex = trimmedFileName.lastIndexOf(".");
+
+  if (extensionIndex <= 0) {
+    return trimmedFileName;
+  }
+
+  return trimmedFileName.slice(0, extensionIndex);
+}
+
+function truncateGeneratedTitle(title: string): string {
+  if (title.length <= generatedTitleMaxLength) {
+    return title;
+  }
+
+  return `${title.slice(0, generatedTitleMaxLength - 3).trimEnd()}...`;
 }
 
 function ConversationList({

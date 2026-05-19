@@ -131,6 +131,36 @@ export class ChatRepository {
     });
   }
 
+  async deleteConversation(
+    conversationId: string,
+  ): Promise<ConversationWithDocumentIds | null> {
+    return this.databaseService.instance.transaction(async (tx) => {
+      const [conversation] = await tx
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .limit(1);
+
+      if (!conversation) {
+        return null;
+      }
+
+      const links = await tx
+        .select()
+        .from(conversationDocuments)
+        .where(eq(conversationDocuments.conversationId, conversationId));
+
+      await tx
+        .delete(conversations)
+        .where(eq(conversations.id, conversationId));
+
+      return {
+        ...conversation,
+        documentIds: links.map((link) => link.documentId),
+      };
+    });
+  }
+
   async findMessagesByConversation(
     conversationId: string,
   ): Promise<ConversationMessage[]> {

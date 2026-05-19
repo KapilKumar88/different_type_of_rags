@@ -144,6 +144,22 @@ export class ChatService {
     return conversation;
   }
 
+  async deleteConversation(
+    userId: string,
+    conversationId: string,
+  ): Promise<ConversationSummary> {
+    await this.getOwnedConversation(userId, conversationId);
+
+    const conversation =
+      await this.chatRepository.deleteConversation(conversationId);
+
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    return conversation;
+  }
+
   async createUserMessage(
     userId: string,
     conversationId: string,

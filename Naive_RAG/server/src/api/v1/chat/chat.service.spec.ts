@@ -67,6 +67,7 @@ describe('ChatService', () => {
       createConversation: jest.fn(),
       updateConversationTitle: jest.fn(),
       replaceConversationDocuments: jest.fn(),
+      deleteConversation: jest.fn(),
       findConversationsByUser: jest.fn(),
       findConversationForUser: jest.fn(),
       findMessagesByConversation: jest.fn(),
@@ -525,6 +526,42 @@ describe('ChatService', () => {
     expect(() =>
       updateConversationDocumentsSchema.parse({ documentIds: ['not-a-uuid'] }),
     ).toThrow();
+  });
+
+  it('deletes a conversation after confirming ownership', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    chatRepository.deleteConversation.mockResolvedValue(conversation);
+
+    const result = await chatService.deleteConversation(
+      'user-1',
+      'conversation-1',
+    );
+
+    expect(chatRepository.findConversationForUser).toHaveBeenCalledWith(
+      'conversation-1',
+      'user-1',
+    );
+    expect(chatRepository.deleteConversation).toHaveBeenCalledWith(
+      'conversation-1',
+    );
+    expect(result).toEqual(conversation);
+  });
+
+  it('rejects conversation deletion for conversations the user does not own', async () => {
+    chatRepository.findConversationForUser.mockResolvedValue(null);
+
+    await expect(
+      chatService.deleteConversation('user-1', 'conversation-1'),
+    ).rejects.toThrow('Conversation not found');
+    expect(chatRepository.deleteConversation).not.toHaveBeenCalled();
   });
 
   it('persists a user message only after confirming conversation ownership', async () => {

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -131,6 +132,24 @@ export class ChatController {
     return {
       success: true,
       message: 'Conversation documents updated successfully',
+      data: { conversation },
+    };
+  }
+
+  @Delete('conversations/:conversationId')
+  async deleteConversation(
+    @CurrentUser() user: SafeUser,
+    @Param(new ZodValidationPipe(conversationIdSchema))
+    params: ConversationIdDto,
+  ) {
+    const conversation = await this.chatService.deleteConversation(
+      user.id,
+      params.conversationId,
+    );
+
+    return {
+      success: true,
+      message: 'Conversation deleted successfully',
       data: { conversation },
     };
   }

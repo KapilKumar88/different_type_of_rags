@@ -98,6 +98,39 @@ export class ChatRepository {
     return withDocumentIds ?? null;
   }
 
+  async replaceConversationDocuments(
+    conversationId: string,
+    documentIds: string[],
+  ): Promise<ConversationWithDocumentIds | null> {
+    return this.databaseService.instance.transaction(async (tx) => {
+      const [conversation] = await tx
+        .update(conversations)
+        .set({ updatedAt: new Date() })
+        .where(eq(conversations.id, conversationId))
+        .returning();
+
+      if (!conversation) {
+        return null;
+      }
+
+      await tx
+        .delete(conversationDocuments)
+        .where(eq(conversationDocuments.conversationId, conversationId));
+
+      await tx.insert(conversationDocuments).values(
+        documentIds.map((documentId) => ({
+          conversationId,
+          documentId,
+        })),
+      );
+
+      return {
+        ...conversation,
+        documentIds,
+      };
+    });
+  }
+
   async findMessagesByConversation(
     conversationId: string,
   ): Promise<ConversationMessage[]> {

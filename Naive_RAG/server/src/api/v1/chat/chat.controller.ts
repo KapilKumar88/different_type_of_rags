@@ -33,6 +33,10 @@ import {
   type CreateMessageDto,
 } from './dto/create-message.dto';
 import {
+  updateConversationDocumentsSchema,
+  type UpdateConversationDocumentsDto,
+} from './dto/update-conversation-documents.dto';
+import {
   updateConversationSchema,
   type UpdateConversationDto,
 } from './dto/update-conversation.dto';
@@ -106,6 +110,27 @@ export class ChatController {
     return {
       success: true,
       message: 'Conversation updated successfully',
+      data: { conversation },
+    };
+  }
+
+  @Patch('conversations/:conversationId/documents')
+  async updateConversationDocuments(
+    @CurrentUser() user: SafeUser,
+    @Param(new ZodValidationPipe(conversationIdSchema))
+    params: ConversationIdDto,
+    @Body(new ZodValidationPipe(updateConversationDocumentsSchema))
+    dto: UpdateConversationDocumentsDto,
+  ) {
+    const conversation = await this.chatService.updateConversationDocuments(
+      user.id,
+      params.conversationId,
+      dto,
+    );
+
+    return {
+      success: true,
+      message: 'Conversation documents updated successfully',
       data: { conversation },
     };
   }

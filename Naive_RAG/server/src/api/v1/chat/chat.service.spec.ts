@@ -8,6 +8,7 @@ import { LlmService } from '../llm/llm.service';
 import { QdrantService } from '../qdrant/qdrant.service';
 import { ChatRepository } from './chat.repository';
 import { ChatService } from './chat.service';
+import { updateConversationDocumentsSchema } from './dto/update-conversation-documents.dto';
 import { updateConversationSchema } from './dto/update-conversation.dto';
 
 function createChunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
@@ -65,6 +66,7 @@ describe('ChatService', () => {
     chatRepository = {
       createConversation: jest.fn(),
       updateConversationTitle: jest.fn(),
+      replaceConversationDocuments: jest.fn(),
       findConversationsByUser: jest.fn(),
       findConversationForUser: jest.fn(),
       findMessagesByConversation: jest.fn(),
@@ -410,6 +412,119 @@ describe('ChatService', () => {
     expect(updateConversationSchema.parse({ title: ' Research notes ' })).toEqual({
       title: 'Research notes',
     });
+  });
+
+  it('updates conversation documents after confirming ownership and selected documents', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    const updatedConversation = {
+      ...conversation,
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      documentIds: ['document-1', 'document-2'],
+    };
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    documentsService.findByIds.mockResolvedValue([
+      {
+        id: 'document-1',
+        fileName: 'one.txt',
+        mimeType: 'text/plain',
+        sizeBytes: 10,
+        chunkCount: 1,
+        createdAt,
+        updatedAt,
+      },
+      {
+        id: 'document-2',
+        fileName: 'two.txt',
+        mimeType: 'text/plain',
+        sizeBytes: 10,
+        chunkCount: 1,
+        createdAt,
+        updatedAt,
+      },
+    ]);
+    chatRepository.replaceConversationDocuments.mockResolvedValue(
+      updatedConversation,
+    );
+
+    const result = await chatService.updateConversationDocuments(
+      'user-1',
+      'conversation-1',
+      {
+        documentIds: ['document-1', 'document-2', 'document-1'],
+      },
+    );
+
+    expect(chatRepository.findConversationForUser).toHaveBeenCalledWith(
+      'conversation-1',
+      'user-1',
+    );
+    expect(documentsService.findByIds).toHaveBeenCalledWith([
+      'document-1',
+      'document-2',
+    ]);
+    expect(chatRepository.replaceConversationDocuments).toHaveBeenCalledWith(
+      'conversation-1',
+      ['document-1', 'document-2'],
+    );
+    expect(result).toEqual(updatedConversation);
+  });
+
+  it('rejects conversation document updates for conversations the user does not own', async () => {
+    chatRepository.findConversationForUser.mockResolvedValue(null);
+
+    await expect(
+      chatService.updateConversationDocuments('user-1', 'conversation-1', {
+        documentIds: ['document-1'],
+      }),
+    ).rejects.toThrow('Conversation not found');
+    expect(documentsService.findByIds).not.toHaveBeenCalled();
+    expect(chatRepository.replaceConversationDocuments).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing selected documents before updating conversation documents', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    documentsService.findByIds.mockResolvedValue([
+      {
+        id: 'document-1',
+        fileName: 'one.txt',
+        mimeType: 'text/plain',
+        sizeBytes: 10,
+        chunkCount: 1,
+        createdAt,
+        updatedAt,
+      },
+    ]);
+
+    await expect(
+      chatService.updateConversationDocuments('user-1', 'conversation-1', {
+        documentIds: ['document-1', 'document-2'],
+      }),
+    ).rejects.toThrow('One or more selected documents were not found');
+    expect(chatRepository.replaceConversationDocuments).not.toHaveBeenCalled();
+  });
+
+  it('validates conversation document update payloads', () => {
+    expect(() =>
+      updateConversationDocumentsSchema.parse({ documentIds: [] }),
+    ).toThrow();
+    expect(() =>
+      updateConversationDocumentsSchema.parse({ documentIds: ['not-a-uuid'] }),
+    ).toThrow();
   });
 
   it('persists a user message only after confirming conversation ownership', async () => {

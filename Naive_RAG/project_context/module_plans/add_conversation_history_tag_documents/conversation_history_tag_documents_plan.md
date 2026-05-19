@@ -39,8 +39,8 @@ Out of scope for this module:
 | Task 03: Server Conversation Foundation | [task_03.md](task_03.md) | Approved | User reviewed and approved proceeding to Task 04. |
 | Task 04: Scoped Retrieval and No Document Overlap | [task_04.md](task_04.md) | Approved | User reviewed and approved proceeding to Task 05. |
 | Task 05: SSE Streaming and Full-History Prompting | [task_05.md](task_05.md) | Approved | User reviewed and approved proceeding to Task 06. |
-| Task 06: Client API Types and Services | [task_06.md](task_06.md) | Review | Added conversation endpoints, client types, service methods, EventSource streaming helper, and client build verification. |
-| Task 07: Client Chat UI Integration | [task_07.md](task_07.md) | Pending | Update chat page for conversations, selected documents, history, and streaming. |
+| Task 06: Client API Types and Services | [task_06.md](task_06.md) | Approved | User reviewed and approved proceeding to Task 07. |
+| Task 07: Client Chat UI Integration | [task_07.md](task_07.md) | Review | Updated chat UI for conversation list, document selection, persisted messages, selected document scope, streamed assistant output, and client build verification. |
 | Task 08: Verification and Context Update | [task_08.md](task_08.md) | Pending | Run builds/tests, perform manual checks, and update test report. |
 
 ## Key Decisions
@@ -93,6 +93,7 @@ Non-streaming endpoints must keep the standard response shape:
 - Task 03 is approved.
 - Task 04 is approved.
 - Task 05 is approved.
-- Task 06 is ready for review.
+- Task 06 is approved.
+- Task 07 is ready for review.
 - Server implementation now includes database schema, migration, conversation endpoints, scoped retrieval safeguards, and SSE answer streaming.
-- Client implementation now includes conversation API contracts, service methods, and a reusable EventSource stream helper.
+- Client implementation now includes conversation API contracts, service methods, reusable EventSource stream helper, and conversation-aware chat UI.

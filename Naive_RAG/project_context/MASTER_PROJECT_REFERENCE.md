@@ -4,8 +4,8 @@ Read this file first in future sessions. It is the compact map of what exists no
 
 ## Read This First
 
-- `client/` is the React frontend. It has real auth flows, protected app routes, API-backed document upload/list/delete, and API-backed RAG chat. Usage/settings/password-reset screens still use mock/local behavior.
-- `server/` is the NestJS backend. It has real auth plus a learning-focused Naive RAG backend with document ingestion, Qdrant vector storage/search, Ollama embeddings/LLM calls, and chat answering.
+- `client/` is the React frontend. It has real auth flows, protected app routes, API-backed document upload/list/delete, and API-backed persisted RAG conversations with document scoping and SSE streaming. Usage/settings/password-reset screens still use mock/local behavior.
+- `server/` is the NestJS backend. It has real auth plus a learning-focused Naive RAG backend with document ingestion, persisted conversation history, document-scoped Qdrant vector search, Ollama embeddings/LLM calls, and SSE chat answering.
 - Ignore generated/vendor output while reasoning about the app: `client/node_modules/`, `server/node_modules/`, `client/dist/`, `server/dist/`.
 - Detailed target guides live in:
   - `project_context/TECH-STACK.md`
@@ -28,7 +28,7 @@ Important files and folders:
 | `client/src/routes/register.tsx` | Real account creation form using Zod validation, `authService.register`, HttpOnly cookie session, Zustand auth state, and navigation to `/app/chat`. |
 | `client/src/routes/forgot-password.tsx` | Mock password reset request form. |
 | `client/src/routes/reset-password.tsx` | Mock new-password form; on submit navigates to `/login`. |
-| `client/src/routes/app.chat.tsx` | API-backed Naive RAG chat UI. Sends questions to `/api/v1/chat/ask`, renders markdown answers, and displays retrieved source chunks with file/page/score/text. |
+| `client/src/routes/app.chat.tsx` | API-backed persisted Naive RAG conversation UI. Lists/creates/renames/deletes conversations, edits document scope, streams assistant answers over SSE, supports Stop and recoverable Retry, renders markdown/source chunks/timestamps, and shows message-shaped loading skeletons. |
 | `client/src/routes/app.documents.tsx` | API-backed documents table. Loads `/api/v1/documents`, filters locally, deletes with `DELETE /api/v1/documents/:id`, and refreshes after upload/delete. |
 | `client/src/routes/app.usage.tsx` | Usage dashboard with Recharts charts and mock token/chat/document stats. |
 | `client/src/routes/app.settings.tsx` | Profile, security, model, and appearance settings UI; all actions are local/mock. |
@@ -39,17 +39,17 @@ Important files and folders:
 | `client/src/components/ui/*` | shadcn/Radix UI primitives. Treat as generated-style UI building blocks. |
 | `client/src/config/*` | Typed client env/API config, including `VITE_API_BASE_URL` fallback to `http://localhost:3000`. |
 | `client/src/guard/*` | Client auth guards: `AuthGuard` protects `/app/*`, `GuestGuard` redirects authenticated users away from `/login` and `/register`, and `AuthLoading` handles session-check loading UI. |
-| `client/src/lib/api-client.ts` | Shared fetch wrapper with `credentials: "include"`, standardized API error handling, JSON/FormData body support, and `GET`/`POST`/`DELETE` helpers. |
+| `client/src/lib/api-client.ts` | Shared fetch wrapper with `credentials: "include"`, standardized API error handling, JSON/FormData body support, and `GET`/`POST`/`PATCH`/`DELETE` helpers. |
 | `client/src/lib/mock/data.ts` | Mock documents, chats, messages, prompts, and usage chart data. |
 | `client/src/lib/query-client.ts` | Shared TanStack Query client. |
 | `client/src/lib/utils.ts` | `cn()` class-name merge helper. |
 | `client/src/services/auth.service.ts` | Auth API service for `register`, `login`, and `me`. |
 | `client/src/services/documents.service.ts` | Documents API service for list, multipart upload, and delete. |
-| `client/src/services/chat.service.ts` | Chat API service for asking Naive RAG questions. |
+| `client/src/services/chat.service.ts` | Chat API service for legacy ask, conversation CRUD/update-scope operations, message creation, and SSE message streaming. |
 | `client/src/store/auth.store.ts` | Zustand auth store with `unknown`, `authenticated`, and `unauthenticated` states. |
 | `client/src/types/auth.types.ts` | Shared auth payload, response, user, and status types. |
 | `client/src/types/document.types.ts` | Document metadata response types used by the documents page and upload dialog. |
-| `client/src/types/chat.types.ts` | Chat answer and retrieved source chunk response types. |
+| `client/src/types/chat.types.ts` | Chat answer, conversation, message, stream event, and retrieved source chunk response types. |
 | `client/src/validations/auth.validation.ts` | Zod schemas for login and registration forms. |
 | `client/src/hooks/use-page-meta.ts` | Sets `document.title` for pages. |
 | `client/src/hooks/use-mobile.tsx` | Mobile breakpoint helper. |
@@ -57,7 +57,7 @@ Important files and folders:
 | `client/vite.config.ts` | Vite plugins: React, Tailwind, tsconfig paths. |
 | `client/components.json` | shadcn configuration and aliases. |
 
-Client now has real auth/session handling, typed API services, TanStack Query provider, Zustand auth store, guarded auth/app routes, API-backed document management, and API-backed RAG chat. Route-level lazy loading is still not implemented. Usage, settings saves, and password reset remain mock/local.
+Client now has real auth/session handling, typed API services, TanStack Query provider, Zustand auth store, guarded auth/app routes, API-backed document management, and API-backed persisted RAG conversations. Chat supports header-upload document cache refresh, descriptive generated titles, inline rename, editable document scope, hard delete, streamed responses with Stop and retry-on-network-error, message timestamps, and loading skeletons. Route-level lazy loading is still not implemented. Usage, settings saves, and password reset remain mock/local.
 
 ## Server Current Map
 
@@ -73,7 +73,7 @@ Important files:
 | `server/src/app.service.ts` | Returns `"Hello World!"`. |
 | `server/src/api/v1/auth/*` | Auth module with register, login, and current-user endpoints, plus controller/service/repository layering and tests. |
 | `server/src/api/v1/documents/*` | Documents module with upload/list/delete endpoints, text extraction helpers, recursive chunking, embedding generation, Qdrant upsert/delete, Postgres metadata repository, and focused tests. |
-| `server/src/api/v1/chat/*` | Chat module with `/api/v1/chat/ask`, question embedding, Qdrant top-5 retrieval, fixed context-only prompt construction, LLM call, source chunk response, and focused tests. |
+| `server/src/api/v1/chat/*` | Chat module with legacy `/api/v1/chat/ask`, persisted conversations/messages, conversation document membership, scoped Qdrant retrieval, SSE answer streaming, rename/scope/delete endpoints, and focused tests. |
 | `server/src/api/v1/qdrant/*` | Shared Qdrant module that ensures collection creation, upserts vector points, searches by vector, and deletes points by `documentId`. |
 | `server/src/api/v1/embeddings/*` | Shared Ollama embeddings module using `nomic-embed-text:v1.5` and validating vector size against config. |
 | `server/src/api/v1/llm/*` | Shared Ollama chat module using configured local/cloud Ollama model for final answer generation. |
@@ -82,6 +82,7 @@ Important files:
 | `server/src/config/*` | Typed config modules for app, database, JWT, cookies, Qdrant, Ollama, RAG settings, and environment parsing. |
 | `server/src/database/schemas/users.schema.ts` | Drizzle users table schema with unique email constraint and password hash. |
 | `server/src/database/schemas/documents.schema.ts` | Drizzle documents metadata table schema. Chunk text and vectors are stored in Qdrant payloads, not Postgres. |
+| `server/src/database/schemas/conversations.schema.ts` | Drizzle conversations, conversation-document join table, and conversation message schema with cascade cleanup. |
 | `server/src/database/migrations/*` | Drizzle migrations for users and documents metadata tables. |
 | `server/src/guard/*` | Global JWT auth guard, `@Public()`, `@CurrentUser()`, and authenticated request typing. |
 | `server/src/services/database/*` | Global Drizzle database module/service backed by Postgres. |
@@ -91,7 +92,7 @@ Important files:
 | `server/drizzle.config.ts` | Drizzle Kit config for schemas and migrations. |
 | `server/package.json` | Nest scripts plus Drizzle migration scripts and auth/database dependencies. |
 
-Server now has auth, users/documents table schemas, Drizzle database foundation, Zod validation, typed config, standardized HTTP error responses, cookie/JWT auth guards, document ingestion, Qdrant vector search, Ollama embeddings/LLM calls, and Naive RAG chat. Server still does not have Redis, BullMQ queues, Socket.io, Swagger decorators, LangGraph, hybrid search, reranking, streaming, or memory.
+Server now has auth, users/documents/conversations table schemas, Drizzle database foundation, Zod validation, typed config, standardized HTTP error responses, cookie/JWT auth guards, document ingestion, Qdrant vector search, Ollama embeddings/LLM calls, persisted conversation history, document-scoped retrieval, and SSE Naive RAG chat. Server still does not have Redis, BullMQ queues, Socket.io, Swagger decorators, LangGraph, hybrid search, reranking, or agentic memory.
 
 ## Auth Module Current State
 
@@ -130,6 +131,22 @@ Implemented backend APIs are protected by the existing cookie JWT guard:
   - Validates `{ question }`.
   - Embeds the question, searches Qdrant top `RAG_TOP_K` chunks, builds the fixed context-only prompt, asks Ollama, and returns `{ answer, sources }`.
   - If no chunks are retrieved, returns `I could not find this information in the uploaded document.` without calling the LLM.
+- `GET /api/v1/chat/conversations`
+  - Returns the authenticated user's conversations with `documentIds`, ordered by most recently updated.
+- `POST /api/v1/chat/conversations`
+  - Validates `{ title?, documentIds }`, deduplicates and validates document IDs, creates a conversation and document membership rows, and returns `{ conversation }`.
+- `GET /api/v1/chat/conversations/:conversationId`
+  - Returns an owned conversation with `documentIds` and ordered persisted messages.
+- `PATCH /api/v1/chat/conversations/:conversationId`
+  - Validates `{ title }`, confirms ownership, updates `title`/`updatedAt`, and returns `{ conversation }`.
+- `PATCH /api/v1/chat/conversations/:conversationId/documents`
+  - Validates `{ documentIds }`, confirms ownership, deduplicates and validates document IDs, transactionally replaces document membership, and returns `{ conversation }`.
+- `DELETE /api/v1/chat/conversations/:conversationId`
+  - Confirms ownership, hard-deletes the conversation, and relies on FK cascade to delete messages and join rows. Documents are not deleted.
+- `POST /api/v1/chat/conversations/:conversationId/messages`
+  - Validates `{ content }`, confirms ownership, persists a user message, updates conversation `updatedAt`, and returns `{ message }`.
+- `GET /api/v1/chat/conversations/:conversationId/messages/:messageId/stream`
+  - SSE endpoint for an owned persisted user message. Retrieves only selected conversation documents from Qdrant, emits `sources`, `token`, `done`, and `error` events, and persists the assistant message on completion.
 
 RAG runtime config:
 
@@ -141,13 +158,14 @@ RAG runtime config:
 - `OLLAMA_LLM_MODEL`, default `minimax-m2.5:cloud`
 - `RAG_TOP_K`, default `5`
 
-Naive RAG intentionally excludes LangGraph, agents, memory, hybrid search, reranking, streaming, and queues.
+Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and queues. It now includes persisted conversation history and SSE token streaming, but not agentic memory outside the stored conversation messages.
 
 ## Current Gaps / Do Not Assume
 
 - `TECH-STACK.md` and the architecture guides are the target direction, not proof that the feature exists.
 - Usage, settings saves, forgot/reset password flows, re-indexing, and profile changes still use local/mock behavior.
 - Documents and chat now call real backend APIs.
+- Chat conversation history and selected document scope are persisted in Postgres; vector chunks remain in Qdrant.
 - Local runtime requires reachable Postgres, Qdrant, and Ollama services. Migrations must be applied before document metadata can persist.
 - Ollama must have the embedding model and chat model available: `nomic-embed-text:v1.5` and `minimax-m2.5:cloud`.
 
@@ -163,6 +181,9 @@ Naive RAG intentionally excludes LangGraph, agents, memory, hybrid search, reran
 - Manual RAG acceptance requires all runtime services to be running; automated tests mock Qdrant/Ollama behavior and do not prove those external services are reachable.
 - Auth e2e tests use Supertest and may need local-bind permission in sandboxed environments.
 - Client lint currently passes with existing Fast Refresh warnings in generated/shared UI/provider files.
+- Client lint also reports existing hook dependency warnings in `app.chat.tsx` for the derived `conversations` and `documents` fallback arrays. They are warnings only and were not introduced as blocking errors during the conversation-improvements work.
+- Conversation deletion is hard delete only. Do not assume archive/soft-delete behavior exists unless a future schema change adds it.
+- SSE retry is client-side and retries the same persisted user message ID. It avoids duplicate user messages, but a server-side stream that already completed and persisted an assistant response before the network error may still require future idempotency safeguards.
 - Update this file after significant architecture decisions, new modules, API contracts, or development pitfalls so future sessions do not re-discover the same context.
 
 ## Quick Verification Snapshot
@@ -174,3 +195,4 @@ Naive RAG intentionally excludes LangGraph, agents, memory, hybrid search, reran
 - RAG verification after Naive RAG module: `npm run build` and `npm test -- --runInBand` from `server/` passed.
 - RAG client verification after Naive RAG module: `npm run build` from `client/` passed, with the existing large-chunk warning.
 - Manual RAG acceptance was not run in this environment because Qdrant at `localhost:6333` and Ollama at `localhost:11434` were not reachable.
+- Conversation improvements verification: `npm test -- chat.service.spec.ts --runInBand` and `npm run build` from `server/` passed; `npm run lint` from `client/` passed with existing warnings only; `npm run build` from `client/` passed with the existing large-chunk warning.

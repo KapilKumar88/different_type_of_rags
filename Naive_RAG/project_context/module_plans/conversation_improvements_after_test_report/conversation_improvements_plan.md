@@ -40,12 +40,12 @@ Out of scope for this follow-up module:
 | Task 02: Header Upload Document Refresh | [task_02.md](task_02.md) | Approved | IMP-01 | User reviewed and approved proceeding to Task 03. |
 | Task 03: Descriptive Generated Conversation Titles | [task_03.md](task_03.md) | Approved | IMP-07 | User reviewed and approved proceeding to Task 04. |
 | Task 04: Conversation Title Editing | [task_04.md](task_04.md) | Approved | IMP-02 | User reviewed and approved proceeding to Task 05. |
-| Task 05: Editable Conversation Document Scope | [task_05.md](task_05.md) | Review | IMP-03 | Existing conversations can replace document scope through a PATCH API and edit-scope dialog; server test/build and client lint/build passed. |
-| Task 06: Conversation Delete Flow | [task_06.md](task_06.md) | Pending | IMP-04 | Add hard delete with cascade cleanup; archive remains a product decision. |
-| Task 07: Stop Generating During Streaming | [task_07.md](task_07.md) | Pending | IMP-05 | Add abort UI and client-side stream cleanup behavior. |
-| Task 08: Message Timestamps and Loading Skeleton | [task_08.md](task_08.md) | Pending | IMP-08, IMP-09 | UI-only polish after behavioral changes. |
-| Task 09: SSE Error Recovery and Retry | [task_09.md](task_09.md) | Pending | IMP-10 | Add explicit EventSource error handling and retry path. |
-| Task 10: Verification and Reference Update | [task_10.md](task_10.md) | Pending | All selected IMPs | Run builds/tests/manual checks and update project reference. |
+| Task 05: Editable Conversation Document Scope | [task_05.md](task_05.md) | Approved | IMP-03 | User reviewed and approved proceeding to Task 06. |
+| Task 06: Conversation Delete Flow | [task_06.md](task_06.md) | Approved | IMP-04 | User reviewed and approved proceeding to Task 07. |
+| Task 07: Stop Generating During Streaming | [task_07.md](task_07.md) | Approved | IMP-05 | User reviewed and approved proceeding to Task 08. |
+| Task 08: Message Timestamps and Loading Skeleton | [task_08.md](task_08.md) | Approved | IMP-08, IMP-09 | User reviewed and approved proceeding to Task 09. |
+| Task 09: SSE Error Recovery and Retry | [task_09.md](task_09.md) | Approved | IMP-10 | User reviewed and approved proceeding to Task 10. |
+| Task 10: Verification and Reference Update | [task_10.md](task_10.md) | Approved | All selected IMPs | User gave final approval. Final server test/build and client lint/build passed; master reference updated. Manual browser checks remain pending for a running full stack. |
 
 ## Key Technical Decisions
 
@@ -90,7 +90,13 @@ Out of scope for this follow-up module:
 - Task 02 is approved.
 - Task 03 is approved.
 - Task 04 is approved.
-- Task 05 is ready for review.
+- Task 05 is approved.
+- Task 06 is approved.
+- Task 07 is approved.
+- Task 08 is approved.
+- Task 09 is approved.
+- Task 10 is approved.
+- Conversation improvements follow-up module is complete.
 - Client verification for Task 02: `npm run build` from `client/` passed with the existing large chunk warning.
 - Client verification for Task 03: `npm run build` from `client/` passed with the existing large chunk warning.
 - Server verification for Task 04: `npm test -- chat.service.spec.ts --runInBand` passed.
@@ -101,4 +107,19 @@ Out of scope for this follow-up module:
 - Server verification for Task 05: `npm run build` from `server/` passed.
 - Client verification for Task 05: `npm run lint` from `client/` passed with existing warnings only.
 - Client verification for Task 05: `npm run build` from `client/` passed with the existing large chunk warning.
+- Server verification for Task 06: `npm test -- chat.service.spec.ts --runInBand` passed.
+- Server verification for Task 06: `npm run build` from `server/` passed.
+- Client verification for Task 06: `npm run lint` from `client/` passed with existing warnings only.
+- Client verification for Task 06: `npm run build` from `client/` passed with the existing large chunk warning.
+- Client verification for Task 07: `npm run lint` from `client/` passed with existing warnings only.
+- Client verification for Task 07: `npm run build` from `client/` passed with the existing large chunk warning.
+- Client verification for Task 08: `npm run lint` from `client/` passed with existing warnings only.
+- Client verification for Task 08: `npm run build` from `client/` passed with the existing large chunk warning.
+- Client verification for Task 09: `npm run lint` from `client/` passed with existing warnings only.
+- Client verification for Task 09: `npm run build` from `client/` passed with the existing large chunk warning.
+- Final verification for Task 10: `npm test -- chat.service.spec.ts --runInBand` from `server/` passed.
+- Final verification for Task 10: `npm run build` from `server/` passed.
+- Final verification for Task 10: `npm run lint` from `client/` passed with existing warnings only.
+- Final verification for Task 10: `npm run build` from `client/` passed with the existing large chunk warning.
+- Manual browser verification for Task 10 was not run in this environment because the full runtime stack was not started here. Covered scenarios to run manually: header upload refresh, generated titles, rename, edit scope add/remove, delete, Stop, timestamps, skeleton, and SSE retry.
 - IMP-06 was intentionally excluded because the user did not request it in this improvement batch.

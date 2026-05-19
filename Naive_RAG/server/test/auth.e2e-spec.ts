@@ -6,6 +6,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { AuthRepository } from '../src/api/v1/auth/auth.repository';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
+import { configureSecurityHeaders } from '../src/common/security/security-headers';
 import type { User } from '../src/database/schemas';
 
 // ---------------------------------------------------------------------------
@@ -67,6 +68,7 @@ describe('Auth API (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
+    configureSecurityHeaders(app);
     app.use(cookieParser());
     app.useGlobalFilters(new HttpExceptionFilter());
     await app.init();

@@ -14,6 +14,8 @@ import type {
   ErrorStreamEvent,
   SourcesStreamEvent,
   TokenStreamEvent,
+  UpdateConversationDocumentsPayload,
+  UpdateConversationDocumentsResponse,
   UpdateConversationPayload,
   UpdateConversationResponse,
 } from "@/types/chat.types";
@@ -55,6 +57,16 @@ export const chatService = {
   ): Promise<UpdateConversationResponse> {
     return apiClient.patch<UpdateConversationResponse, UpdateConversationPayload>(
       apiConfig.endpoints.chat.updateConversation(id),
+      payload,
+    );
+  },
+
+  updateConversationDocuments(
+    id: string,
+    payload: UpdateConversationDocumentsPayload,
+  ): Promise<UpdateConversationDocumentsResponse> {
+    return apiClient.patch<UpdateConversationDocumentsResponse, UpdateConversationDocumentsPayload>(
+      apiConfig.endpoints.chat.updateConversationDocuments(id),
       payload,
     );
   },

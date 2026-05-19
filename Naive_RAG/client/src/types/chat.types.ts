@@ -46,6 +46,10 @@ export type UpdateConversationPayload = {
   title: string;
 };
 
+export type UpdateConversationDocumentsPayload = {
+  documentIds: string[];
+};
+
 export type CreateMessagePayload = {
   content: string;
 };
@@ -76,6 +80,14 @@ export type CreateConversationResponse = {
 };
 
 export type UpdateConversationResponse = {
+  success: true;
+  message: string;
+  data: {
+    conversation: Conversation;
+  };
+};
+
+export type UpdateConversationDocumentsResponse = {
   success: true;
   message: string;
   data: {

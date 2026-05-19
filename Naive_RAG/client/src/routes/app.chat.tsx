@@ -50,6 +50,11 @@ type RenameConversationInput = {
   title: string;
 };
 
+type UpdateConversationDocumentsInput = {
+  conversationId: string;
+  documentIds: string[];
+};
+
 const conversationsQueryKey = ["chat", "conversations"] as const;
 const documentsQueryKey = ["documents"] as const;
 const generatedTitleMaxLength = 40;
@@ -71,6 +76,8 @@ export function ChatPage() {
   const [streaming, setStreaming] = React.useState(false);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [selectedDocumentIds, setSelectedDocumentIds] = React.useState<string[]>([]);
+  const [scopeDialogOpen, setScopeDialogOpen] = React.useState(false);
+  const [scopeDocumentIds, setScopeDocumentIds] = React.useState<string[]>([]);
   const streamCleanupRef = React.useRef<(() => void) | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -126,6 +133,11 @@ export function ChatPage() {
   const updateConversationMutation = useMutation({
     mutationFn: ({ conversationId, title }: RenameConversationInput) =>
       chatService.updateConversation(conversationId, { title }),
+  });
+
+  const updateConversationDocumentsMutation = useMutation({
+    mutationFn: ({ conversationId, documentIds }: UpdateConversationDocumentsInput) =>
+      chatService.updateConversationDocuments(conversationId, { documentIds }),
   });
 
   const createConversationMutation = useMutation({
@@ -186,6 +198,52 @@ export function ChatPage() {
         ? current.filter((id) => id !== documentId)
         : [...current, documentId],
     );
+  };
+
+  const toggleScopeDocument = (documentId: string) => {
+    setScopeDocumentIds((current) =>
+      current.includes(documentId)
+        ? current.filter((id) => id !== documentId)
+        : [...current, documentId],
+    );
+  };
+
+  const openScopeDialog = () => {
+    if (!activeConversation) {
+      return;
+    }
+
+    setScopeDocumentIds(activeConversation.documentIds);
+    setScopeDialogOpen(true);
+  };
+
+  const saveScope = async () => {
+    if (!activeConversationId || scopeDocumentIds.length === 0) {
+      return;
+    }
+
+    try {
+      const response = await updateConversationDocumentsMutation.mutateAsync({
+        conversationId: activeConversationId,
+        documentIds: scopeDocumentIds,
+      });
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: conversationsQueryKey }),
+        queryClient.invalidateQueries({
+          queryKey: ["chat", "conversation", activeConversationId],
+        }),
+      ]);
+      setScopeDocumentIds(response.data.conversation.documentIds);
+      setScopeDialogOpen(false);
+      toast.success("Document scope updated", {
+        description: `${response.data.conversation.documentIds.length} documents selected`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof ApiClientError ? error.message : "Unable to update document scope";
+      toast.error("Scope update failed", { description: message });
+    }
   };
 
   const renameConversation = async (conversationId: string, title: string): Promise<boolean> => {
@@ -352,6 +410,7 @@ export function ChatPage() {
               <ConversationHeader
                 conversation={activeConversation}
                 selectedDocuments={selectedDocuments}
+                onEditScope={openScopeDialog}
               />
               <div className="space-y-6">
                 {messages.map((message) => (
@@ -365,7 +424,19 @@ export function ChatPage() {
         <div className="border-t border-border bg-background/80 p-3 backdrop-blur sm:p-4">
           <div className="mx-auto w-full">
             {activeConversation && selectedDocuments.length > 0 && (
-              <DocumentScope documents={selectedDocuments} />
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <DocumentScope documents={selectedDocuments} />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={openScopeDialog}
+                  className="h-7 gap-1.5 px-2 text-xs"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  Edit scope
+                </Button>
+              </div>
             )}
             {!isEmpty && messages.length < 6 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
@@ -436,6 +507,19 @@ export function ChatPage() {
         creating={createConversationMutation.isPending}
         onToggleDocument={toggleDocument}
         onCreate={() => createConversationMutation.mutate()}
+      />
+      <EditScopeDialog
+        open={scopeDialogOpen}
+        onOpenChange={setScopeDialogOpen}
+        documents={documents}
+        loading={documentsQuery.isPending}
+        selectedDocumentIds={scopeDocumentIds}
+        saving={updateConversationDocumentsMutation.isPending}
+        hasMessages={messages.length > 0}
+        onToggleDocument={toggleScopeDocument}
+        onSave={() => {
+          void saveScope();
+        }}
       />
     </div>
   );
@@ -692,9 +776,11 @@ function ConversationListItem({
 function ConversationHeader({
   conversation,
   selectedDocuments,
+  onEditScope,
 }: Readonly<{
   conversation: Conversation | null;
   selectedDocuments: RagDocument[];
+  onEditScope: () => void;
 }>) {
   if (!conversation) {
     return null;
@@ -702,9 +788,21 @@ function ConversationHeader({
 
   return (
     <div className="mb-6 border-b border-border pb-4">
-      <h2 className="truncate text-lg font-semibold tracking-tight text-foreground">
-        {conversation.title}
-      </h2>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="min-w-0 truncate text-lg font-semibold tracking-tight text-foreground">
+          {conversation.title}
+        </h2>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onEditScope}
+          className="h-8 shrink-0 gap-1.5"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Edit scope
+        </Button>
+      </div>
       <DocumentScope documents={selectedDocuments} />
     </div>
   );
@@ -981,6 +1079,109 @@ function NewConversationDialog({
           <Button onClick={onCreate} disabled={!canCreate} className="gap-1.5">
             {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Create chat
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditScopeDialog({
+  open,
+  onOpenChange,
+  documents,
+  loading,
+  selectedDocumentIds,
+  saving,
+  hasMessages,
+  onToggleDocument,
+  onSave,
+}: Readonly<{
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  documents: RagDocument[];
+  loading: boolean;
+  selectedDocumentIds: string[];
+  saving: boolean;
+  hasMessages: boolean;
+  onToggleDocument: (documentId: string) => void;
+  onSave: () => void;
+}>) {
+  const canSave = selectedDocumentIds.length > 0 && !saving;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Edit document scope</DialogTitle>
+          <DialogDescription>
+            Add or remove indexed documents for this conversation.
+          </DialogDescription>
+        </DialogHeader>
+
+        {hasMessages && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+            Future answers will use the updated document scope. Existing messages stay in this
+            conversation and may have been generated from the previous scope.
+          </div>
+        )}
+
+        <div className="max-h-80 overflow-y-auto rounded-lg border border-border">
+          {loading ? (
+            <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading documents...
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="p-4 text-sm text-muted-foreground">
+              Upload and index documents before editing scope.
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {documents.map((document) => {
+                const checked = selectedDocumentIds.includes(document.id);
+
+                return (
+                  <label
+                    key={document.id}
+                    className="flex cursor-pointer items-start gap-3 p-3 hover:bg-accent/40"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => onToggleDocument(document.id)}
+                      className="mt-0.5"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate text-sm font-medium text-foreground">
+                          {document.fileName}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{document.chunkCount} chunks</span>
+                        {checked && (
+                          <span className="inline-flex items-center gap-1 text-success">
+                            <CheckCircle2 className="h-3 w-3" />
+                            In scope
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={onSave} disabled={!canSave} className="gap-1.5">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            Save scope
           </Button>
         </DialogFooter>
       </DialogContent>

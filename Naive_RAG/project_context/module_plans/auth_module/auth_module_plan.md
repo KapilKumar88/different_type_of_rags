@@ -29,6 +29,10 @@ Module scope is limited to:
 | Task 06: Login Flow | [task_06.md](task_06.md) | Approved | User approved the login flow. |
 | Task 07: Registration Flow | [task_07.md](task_07.md) | Approved | User approved the registration flow. |
 | Task 08: Client Auth Guard | [task_08.md](task_08.md) | Approved | User approved the client auth guard. |
+| Task 09: Server-Side Logout | [task_09.md](task_09.md) | Approved | User approved server logout hardening. |
+| Task 10: Remove Hardcoded Database Credential Default | [task_10.md](task_10.md) | Approved | User approved database credential default removal. |
+| Task 11: Auth Endpoint Rate Limiting | [task_11.md](task_11.md) | Approved | User approved auth endpoint rate limiting. |
+| Task 12: HTTP Security Headers | [task_12.md](task_12.md) | Review | Added Helmet security headers and e2e header assertions. |
 
 ## Key Decisions
 
@@ -38,6 +42,7 @@ Module scope is limited to:
 - Follow the server controller/service/repository structure.
 - Follow the client service/store/validation structure.
 - Do not expand scope beyond login, registration, and auth guard behavior.
+- Post-test logout hardening is tracked as Task 09 because the original sign-out UI did not clear the HttpOnly server cookie.
 
 ## Strict Workflow
 
@@ -59,4 +64,8 @@ Module scope is limited to:
 - Task 06 is approved.
 - Task 07 is approved.
 - Task 08 is approved.
-- Authentication module is complete.
+- Task 09 is approved.
+- Task 10 is approved.
+- Task 11 is approved.
+- Task 12 is in review.
+- Authentication module post-test hardening is in progress.

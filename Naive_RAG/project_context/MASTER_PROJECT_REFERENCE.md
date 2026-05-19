@@ -43,7 +43,7 @@ Important files and folders:
 | `client/src/lib/mock/data.ts` | Mock documents, chats, messages, prompts, and usage chart data. |
 | `client/src/lib/query-client.ts` | Shared TanStack Query client. |
 | `client/src/lib/utils.ts` | `cn()` class-name merge helper. |
-| `client/src/services/auth.service.ts` | Auth API service for `register`, `login`, and `me`. |
+| `client/src/services/auth.service.ts` | Auth API service for `register`, `login`, `logout`, and `me`. |
 | `client/src/services/documents.service.ts` | Documents API service for list, multipart upload, and delete. |
 | `client/src/services/chat.service.ts` | Chat API service for legacy ask, conversation CRUD/update-scope operations, message creation, and SSE message streaming. |
 | `client/src/store/auth.store.ts` | Zustand auth store with `unknown`, `authenticated`, and `unauthenticated` states. |
@@ -67,7 +67,7 @@ Important files:
 
 | Path | What it contains |
 | --- | --- |
-| `server/src/main.ts` | Creates `AppModule`, registers cookie parsing and HTTP exception filtering, and listens on typed app config port. |
+| `server/src/main.ts` | Creates `AppModule`, registers Helmet security headers, cookie parsing, and HTTP exception filtering, and listens on typed app config port. |
 | `server/src/app.module.ts` | Root module registering app services, database module, auth module, documents module, chat module, and global JWT auth guard. |
 | `server/src/app.controller.ts` | Root controller exposing public `GET /`. |
 | `server/src/app.service.ts` | Returns `"Hello World!"`. |
@@ -78,8 +78,9 @@ Important files:
 | `server/src/api/v1/embeddings/*` | Shared Ollama embeddings module using `nomic-embed-text:v1.5` and validating vector size against config. |
 | `server/src/api/v1/llm/*` | Shared Ollama chat module using configured local/cloud Ollama model for final answer generation. |
 | `server/src/common/filters/http-exception.filter.ts` | Standardizes Nest HTTP errors into `{ success, message, data }`. |
+| `server/src/common/security/security-headers.ts` | Shared Helmet setup for HTTP security headers, including `X-Frame-Options: DENY`. |
 | `server/src/common/pipes/zod-validation.pipe.ts` | Reusable Zod request validation pipe returning `422` validation errors. |
-| `server/src/config/*` | Typed config modules for app, database, JWT, cookies, Qdrant, Ollama, RAG settings, and environment parsing. |
+| `server/src/config/*` | Typed config modules for app, database, JWT, cookies, auth rate limits, Qdrant, Ollama, RAG settings, and environment parsing. `env.ts` loads server `.env` values before Zod validation while preserving real environment variable precedence. |
 | `server/src/database/schemas/users.schema.ts` | Drizzle users table schema with unique email constraint and password hash. |
 | `server/src/database/schemas/documents.schema.ts` | Drizzle documents metadata table schema. Chunk text and vectors are stored in Qdrant payloads, not Postgres. |
 | `server/src/database/schemas/conversations.schema.ts` | Drizzle conversations, conversation-document join table, and conversation message schema with cascade cleanup. |
@@ -100,14 +101,18 @@ Implemented scope:
 
 - `POST /api/v1/auth/register` validates name/email/password/confirmPassword, rejects duplicate email with `409`, hashes passwords, creates users, sets the HttpOnly auth cookie, and returns safe user fields.
 - `POST /api/v1/auth/login` validates email/password, rejects invalid credentials with `401`, sets the HttpOnly auth cookie, and returns safe user fields.
+- `POST /api/v1/auth/logout` is idempotent/public, clears the configured HttpOnly auth cookie, and returns `{ success: true, message: 'Logout successful', data: null }`.
 - `GET /api/v1/auth/me` is protected by the global JWT guard and returns the guard-provided authenticated user.
+- `POST /api/v1/auth/register` and `POST /api/v1/auth/login` are rate-limited with `@nestjs/throttler`, defaulting to 5 requests per 60 seconds per client.
 - Client login/register forms call the backend through `authService`, validate with Zod, store the returned user in Zustand, and navigate to `/app/chat` on success.
+- Client sidebar sign-out calls `authService.logout()` before clearing Zustand auth state and navigating to `/login`.
 - Client `/app/*` routes verify session state through `/api/v1/auth/me`; unauthenticated users redirect to `/login`.
 - Client `/login` and `/register` redirect authenticated users to `/app/chat`.
 
 Auth API response contracts:
 
 - Success responses use `{ success: true, message, data: { user } }`.
+- Logout success uses `{ success: true, message, data: null }`.
 - Error responses use `{ success: false, message, data }`.
 - Safe user shape is `{ id, name, email }`; `passwordHash` is never returned.
 - Auth session is an HttpOnly cookie named by `AUTH_COOKIE_NAME` (`rag_auth_token` by default).
@@ -173,6 +178,9 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
 
 - Keep current implementation and planned architecture explicitly separated in docs and code reviews.
 - Future env work should extend typed config first. Avoid direct `process.env` or `import.meta.env` access in feature code.
+- `DATABASE_URL` is required by server config and has no application-source default. Local development must provide it through server `.env` or the process environment; tests set explicit values through Jest setup.
+- Auth rate limiting is intentionally scoped to credential-entry endpoints. Current defaults are `AUTH_RATE_LIMIT_LIMIT=5` and `AUTH_RATE_LIMIT_TTL_MS=60000`.
+- Helmet is enabled during bootstrap through `configureSecurityHeaders()`. E2E tests use the same helper so security headers stay covered.
 - Client build currently succeeds but warns that the JS bundle is large; add route-level `React.lazy`/`Suspense` and chunking before the app grows much further.
 - Several route files already hold substantial UI and local logic. Extract feature components/hooks/services as real behavior is added.
 - Avoid backend shortcuts in services: planned server architecture expects controller -> service -> repository -> database, with Zod validation and standardized responses.
@@ -196,3 +204,7 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
 - RAG client verification after Naive RAG module: `npm run build` from `client/` passed, with the existing large-chunk warning.
 - Manual RAG acceptance was not run in this environment because Qdrant at `localhost:6333` and Ollama at `localhost:11434` were not reachable.
 - Conversation improvements verification: `npm test -- chat.service.spec.ts --runInBand` and `npm run build` from `server/` passed; `npm run lint` from `client/` passed with existing warnings only; `npm run build` from `client/` passed with the existing large-chunk warning.
+- Auth logout hardening verification: `npm test -- auth.controller.spec.ts --runInBand`, `npm run build` from `server/`, `npm run test:e2e -- auth.e2e-spec.ts --runInBand` with local-bind permission, `npm run lint` from `client/`, and `npm run build` from `client/` passed. Client lint still reports the existing Fast Refresh and chat hook dependency warnings.
+- Auth env hardening verification: `npm test -- env.spec.ts --runInBand`, `npm test -- auth.controller.spec.ts --runInBand`, `npm test -- --runInBand`, `npm run build` from `server/`, and `npm run test:e2e -- auth.e2e-spec.ts --runInBand` with local-bind permission passed.
+- Auth rate-limit verification: `npm test -- auth.controller.spec.ts --runInBand`, `npm test -- env.spec.ts --runInBand`, `npm test -- --runInBand`, `npm run build` from `server/`, and `npm run test:e2e -- auth.e2e-spec.ts --runInBand` with local-bind permission passed. Auth e2e now includes `429` coverage for login and registration.
+- Security headers verification: `npm run build` from `server/`, `npm test -- app.controller.spec.ts --runInBand`, `npm test -- --runInBand`, `npm run test:e2e -- app.e2e-spec.ts --runInBand` with local-bind permission, and `npm run test:e2e -- auth.e2e-spec.ts --runInBand` with local-bind permission passed.

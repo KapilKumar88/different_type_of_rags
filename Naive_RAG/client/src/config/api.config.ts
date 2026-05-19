@@ -19,6 +19,7 @@ export const apiConfig = {
       conversation: (id: string) => `/api/v1/chat/conversations/${id}`,
       updateConversation: (id: string) => `/api/v1/chat/conversations/${id}`,
       updateConversationDocuments: (id: string) => `/api/v1/chat/conversations/${id}/documents`,
+      deleteConversation: (id: string) => `/api/v1/chat/conversations/${id}`,
       messages: (conversationId: string) => `/api/v1/chat/conversations/${conversationId}/messages`,
       messageStream: (conversationId: string, messageId: string) =>
         `/api/v1/chat/conversations/${conversationId}/messages/${messageId}/stream`,

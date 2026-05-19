@@ -95,6 +95,14 @@ export type UpdateConversationDocumentsResponse = {
   };
 };
 
+export type DeleteConversationResponse = {
+  success: true;
+  message: string;
+  data: {
+    conversation: Conversation;
+  };
+};
+
 export type ConversationDetailsResponse = {
   success: true;
   message: string;

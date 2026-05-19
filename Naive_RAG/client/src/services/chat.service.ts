@@ -10,6 +10,7 @@ import type {
   CreateConversationResponse,
   CreateMessagePayload,
   CreateMessageResponse,
+  DeleteConversationResponse,
   DoneStreamEvent,
   ErrorStreamEvent,
   SourcesStreamEvent,
@@ -68,6 +69,12 @@ export const chatService = {
     return apiClient.patch<UpdateConversationDocumentsResponse, UpdateConversationDocumentsPayload>(
       apiConfig.endpoints.chat.updateConversationDocuments(id),
       payload,
+    );
+  },
+
+  deleteConversation(id: string): Promise<DeleteConversationResponse> {
+    return apiClient.delete<DeleteConversationResponse>(
+      apiConfig.endpoints.chat.deleteConversation(id),
     );
   },
 

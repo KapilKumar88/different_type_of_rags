@@ -5,12 +5,14 @@ import {
   Copy,
   FileText,
   Loader2,
+  MoreHorizontal,
   MessageSquare,
   MessageSquarePlus,
   Pencil,
   Plus,
   Send,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +23,16 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -28,6 +40,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Markdown } from "@/components/chat/markdown";
 import { usePageMeta } from "@/hooks/use-page-meta";
 import { ApiClientError } from "@/lib/api-client";
@@ -139,6 +157,9 @@ export function ChatPage() {
     mutationFn: ({ conversationId, documentIds }: UpdateConversationDocumentsInput) =>
       chatService.updateConversationDocuments(conversationId, { documentIds }),
   });
+  const deleteConversationMutation = useMutation({
+    mutationFn: chatService.deleteConversation,
+  });
 
   const createConversationMutation = useMutation({
     mutationFn: () => {
@@ -243,6 +264,41 @@ export function ChatPage() {
       const message =
         error instanceof ApiClientError ? error.message : "Unable to update document scope";
       toast.error("Scope update failed", { description: message });
+    }
+  };
+
+  const deleteConversation = async (conversationId: string): Promise<boolean> => {
+    const conversation = conversations.find((item) => item.id === conversationId);
+
+    try {
+      const response = await deleteConversationMutation.mutateAsync(conversationId);
+      const remainingConversations = conversations.filter((item) => item.id !== conversationId);
+
+      queryClient.removeQueries({
+        queryKey: ["chat", "conversation", conversationId],
+      });
+      await queryClient.invalidateQueries({ queryKey: conversationsQueryKey });
+
+      if (activeConversationId === conversationId) {
+        closeStream();
+        setActiveConversationId(remainingConversations[0]?.id ?? null);
+        setMessages([]);
+        setInput("");
+      }
+
+      toast.success("Conversation deleted", {
+        description: response.data.conversation.title,
+      });
+
+      return true;
+    } catch (error) {
+      const message =
+        error instanceof ApiClientError ? error.message : "Unable to delete conversation";
+      toast.error("Delete failed", {
+        description: conversation?.title ? `${conversation.title}: ${message}` : message,
+      });
+
+      return false;
     }
   };
 
@@ -363,6 +419,9 @@ export function ChatPage() {
   const renamingConversationId = updateConversationMutation.isPending
     ? (updateConversationMutation.variables?.conversationId ?? null)
     : null;
+  const deletingConversationId = deleteConversationMutation.isPending
+    ? (deleteConversationMutation.variables ?? null)
+    : null;
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] min-h-0 w-full">
@@ -378,7 +437,9 @@ export function ChatPage() {
           loading={conversationsQuery.isPending}
           onSelect={selectConversation}
           onRename={renameConversation}
+          onDelete={deleteConversation}
           renamingConversationId={renamingConversationId}
+          deletingConversationId={deletingConversationId}
         />
       </aside>
 
@@ -577,14 +638,18 @@ function ConversationList({
   loading,
   onSelect,
   onRename,
+  onDelete,
   renamingConversationId,
+  deletingConversationId,
 }: Readonly<{
   conversations: Conversation[];
   activeConversationId: string | null;
   loading: boolean;
   onSelect: (conversationId: string) => void;
   onRename: (conversationId: string, title: string) => Promise<boolean>;
+  onDelete: (conversationId: string) => Promise<boolean>;
   renamingConversationId: string | null;
+  deletingConversationId: string | null;
 }>) {
   if (loading) {
     return (
@@ -615,8 +680,10 @@ function ConversationList({
               conversation={conversation}
               active={active}
               renaming={renamingConversationId === conversation.id}
+              deleting={deletingConversationId === conversation.id}
               onSelect={onSelect}
               onRename={onRename}
+              onDelete={onDelete}
             />
           );
         })}
@@ -629,16 +696,21 @@ function ConversationListItem({
   conversation,
   active,
   renaming,
+  deleting,
   onSelect,
   onRename,
+  onDelete,
 }: Readonly<{
   conversation: Conversation;
   active: boolean;
   renaming: boolean;
+  deleting: boolean;
   onSelect: (conversationId: string) => void;
   onRename: (conversationId: string, title: string) => Promise<boolean>;
+  onDelete: (conversationId: string) => Promise<boolean>;
 }>) {
   const [editing, setEditing] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [draftTitle, setDraftTitle] = React.useState(conversation.title);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -677,6 +749,14 @@ function ConversationListItem({
 
     if (renamed) {
       setEditing(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    const deleted = await onDelete(conversation.id);
+
+    if (deleted) {
+      setDeleteOpen(false);
     }
   };
 
@@ -760,15 +840,63 @@ function ConversationListItem({
           {conversation.documentIds.length} documents
         </div>
       </button>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-7 w-7 shrink-0 text-muted-foreground"
-        onClick={startEditing}
-        aria-label={`Rename ${conversation.title}`}
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </Button>
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 shrink-0 text-muted-foreground"
+              aria-label={`Open actions for ${conversation.title}`}
+            >
+              {deleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={startEditing}>
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onSelect={(event) => {
+                event.preventDefault();
+                setDeleteOpen(true);
+              }}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes "{conversation.title}" and its saved messages. Documents
+              remain available in your workspace.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDelete();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

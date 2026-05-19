@@ -1,4 +1,5 @@
 import { useLocation } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Search, Upload } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
@@ -16,6 +17,7 @@ const TITLES: Record<string, string> = {
 
 export function AppHeader() {
   const { pathname } = useLocation();
+  const queryClient = useQueryClient();
   const title = TITLES[pathname] ?? "Workspace";
 
   return (
@@ -31,7 +33,11 @@ export function AppHeader() {
             ⌘K
           </kbd>
         </div>
-        <UploadDialog>
+        <UploadDialog
+          onUploaded={() => {
+            queryClient.invalidateQueries({ queryKey: ["documents"] });
+          }}
+        >
           <Button size="sm" className="gap-1.5">
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Upload</span>

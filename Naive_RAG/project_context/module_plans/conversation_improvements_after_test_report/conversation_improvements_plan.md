@@ -36,8 +36,8 @@ Out of scope for this follow-up module:
 
 | Task | File | Status | Improvement IDs | Notes |
 | --- | --- | --- | --- | --- |
-| Task 01: Planning and Review Gates | [task_01.md](task_01.md) | Review | All selected IMPs | Plan created from the test report and current code review. |
-| Task 02: Header Upload Document Refresh | [task_02.md](task_02.md) | Pending | IMP-01 | Fix the known upload invalidation bug first. |
+| Task 01: Planning and Review Gates | [task_01.md](task_01.md) | Approved | All selected IMPs | User reviewed the follow-up plan and approved implementation. |
+| Task 02: Header Upload Document Refresh | [task_02.md](task_02.md) | Review | IMP-01 | Header upload now invalidates `["documents"]`; client build passed with the existing large chunk warning. |
 | Task 03: Descriptive Generated Conversation Titles | [task_03.md](task_03.md) | Pending | IMP-07 | Improve default titles before adding rename behavior. |
 | Task 04: Conversation Title Editing | [task_04.md](task_04.md) | Pending | IMP-02 | Add PATCH API and inline/sidebar rename UI. |
 | Task 05: Editable Conversation Document Scope | [task_05.md](task_05.md) | Pending | IMP-03 | Patch existing conversation document membership without creating a new chat. |
@@ -86,6 +86,7 @@ Out of scope for this follow-up module:
 
 ## Completion Summary
 
-- Planning is ready for review.
-- No implementation has started.
+- Planning is approved.
+- Task 02 is ready for review.
+- Client verification for Task 02: `npm run build` from `client/` passed with the existing large chunk warning.
 - IMP-06 was intentionally excluded because the user did not request it in this improvement batch.

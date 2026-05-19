@@ -288,7 +288,7 @@ export function ChatPage() {
           />
         ) : (
           <div ref={scrollRef} className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:py-8">
+            <div className="mx-auto w-full px-4 py-6 sm:py-8">
               <ConversationHeader
                 conversation={activeConversation}
                 selectedDocuments={selectedDocuments}
@@ -303,7 +303,7 @@ export function ChatPage() {
         )}
 
         <div className="border-t border-border bg-background/80 p-3 backdrop-blur sm:p-4">
-          <div className="mx-auto w-full max-w-3xl">
+          <div className="mx-auto w-full">
             {activeConversation && selectedDocuments.length > 0 && (
               <DocumentScope documents={selectedDocuments} />
             )}

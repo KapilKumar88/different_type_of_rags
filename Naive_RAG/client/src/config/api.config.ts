@@ -15,6 +15,11 @@ export const apiConfig = {
     },
     chat: {
       ask: "/api/v1/chat/ask",
+      conversations: "/api/v1/chat/conversations",
+      conversation: (id: string) => `/api/v1/chat/conversations/${id}`,
+      messages: (conversationId: string) => `/api/v1/chat/conversations/${conversationId}/messages`,
+      messageStream: (conversationId: string, messageId: string) =>
+        `/api/v1/chat/conversations/${conversationId}/messages/${messageId}/stream`,
     },
   },
 } as const;

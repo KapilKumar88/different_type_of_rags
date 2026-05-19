@@ -1,6 +1,11 @@
 import { apiConfig } from "@/config/api.config";
 import { apiClient } from "@/lib/api-client";
-import type { AuthResponse, LoginPayload, RegisterPayload } from "@/types/auth.types";
+import type {
+  AuthResponse,
+  LoginPayload,
+  LogoutResponse,
+  RegisterPayload,
+} from "@/types/auth.types";
 
 export const authService = {
   register(payload: RegisterPayload): Promise<AuthResponse> {
@@ -16,5 +21,11 @@ export const authService = {
 
   me(): Promise<AuthResponse> {
     return apiClient.get<AuthResponse>(apiConfig.endpoints.auth.me);
+  },
+
+  logout(): Promise<LogoutResponse> {
+    return apiClient.request<LogoutResponse>(apiConfig.endpoints.auth.logout, {
+      method: "POST",
+    });
   },
 };

@@ -1,4 +1,5 @@
-import { Link, NavLink } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { MessageSquare, FileText, BarChart3, Settings, LogOut, Sparkles } from "lucide-react";
 import {
   Sidebar,
@@ -21,6 +22,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ApiClientError } from "@/lib/api-client";
+import { authService } from "@/services/auth.service";
+import { useAuthStore } from "@/store/auth.store";
+import { toast } from "sonner";
 
 const items = [
   { title: "Chat", url: "/app/chat", icon: MessageSquare },
@@ -30,6 +35,27 @@ const items = [
 ];
 
 export function AppSidebar() {
+  const navigate = useNavigate();
+  const setUnauthenticated = useAuthStore((state) => state.setUnauthenticated);
+  const logoutMutation = useMutation({
+    mutationFn: authService.logout,
+    onSuccess: () => {
+      setUnauthenticated();
+      toast.success("Signed out");
+      navigate("/login", { replace: true });
+    },
+    onError: (error) => {
+      const message =
+        error instanceof ApiClientError ? error.message : "Unable to sign out. Please try again.";
+
+      toast.error("Sign out failed", { description: message });
+    },
+  });
+
+  function handleSignOut() {
+    logoutMutation.mutate();
+  }
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
@@ -94,10 +120,9 @@ export function AppSidebar() {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link to="/login">
-                <LogOut className="mr-2 h-4 w-4" /> Sign out
-              </Link>
+            <DropdownMenuItem onSelect={handleSignOut} disabled={logoutMutation.isPending}>
+              <LogOut className="mr-2 h-4 w-4" />
+              {logoutMutation.isPending ? "Signing out..." : "Sign out"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

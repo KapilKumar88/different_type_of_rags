@@ -34,4 +34,6 @@ export type ApiErrorResponse<TData = unknown> = {
 
 export type AuthResponse = ApiSuccessResponse<AuthData>;
 
+export type LogoutResponse = ApiSuccessResponse<null>;
+
 export type AuthStatus = "unknown" | "authenticated" | "unauthenticated";

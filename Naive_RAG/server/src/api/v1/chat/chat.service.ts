@@ -1,14 +1,27 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ragConfig } from '../../../config/rag.config';
+import type { ConversationMessage } from '../../../database/schemas';
 import type { RetrievedChunk } from '../../../types/rag.types';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { LlmService } from '../llm/llm.service';
 import { QdrantService } from '../qdrant/qdrant.service';
+import {
+  ChatRepository,
+  type ConversationWithDocumentIds,
+} from './chat.repository';
 import type { AskQuestionDto } from './dto/ask-question.dto';
+import type { CreateConversationDto } from './dto/create-conversation.dto';
+import type { CreateMessageDto } from './dto/create-message.dto';
 
 export type AskQuestionResult = {
   answer: string;
   sources: RetrievedChunk[];
+};
+
+export type ConversationSummary = ConversationWithDocumentIds;
+
+export type ConversationDetails = ConversationWithDocumentIds & {
+  messages: ConversationMessage[];
 };
 
 const promptTemplate = `You are a helpful assistant. Answer the user's question using only the provided context. If the answer is not available in the context, say: I could not find this information in the uploaded document.
@@ -27,7 +40,56 @@ export class ChatService {
     private readonly embeddingsService: EmbeddingsService,
     private readonly qdrantService: QdrantService,
     private readonly llmService: LlmService,
+    private readonly chatRepository: ChatRepository,
   ) {}
+
+  listConversations(userId: string): Promise<ConversationSummary[]> {
+    return this.chatRepository.findConversationsByUser(userId);
+  }
+
+  createConversation(
+    userId: string,
+    dto: CreateConversationDto,
+  ): Promise<ConversationSummary> {
+    return this.chatRepository.createConversation(
+      {
+        userId,
+        title: dto.title ?? 'New conversation',
+      },
+      dto.documentIds,
+    );
+  }
+
+  async getConversation(
+    userId: string,
+    conversationId: string,
+  ): Promise<ConversationDetails> {
+    const conversation = await this.getOwnedConversation(
+      userId,
+      conversationId,
+    );
+    const messages =
+      await this.chatRepository.findMessagesByConversation(conversationId);
+
+    return {
+      ...conversation,
+      messages,
+    };
+  }
+
+  async createUserMessage(
+    userId: string,
+    conversationId: string,
+    dto: CreateMessageDto,
+  ): Promise<ConversationMessage> {
+    await this.getOwnedConversation(userId, conversationId);
+
+    return this.chatRepository.createMessage({
+      conversationId,
+      role: 'user',
+      content: dto.content,
+    });
+  }
 
   async ask(dto: AskQuestionDto): Promise<AskQuestionResult> {
     // 1. Embed the user's question into the same vector space as the chunks.
@@ -76,5 +138,21 @@ export class ChatService {
     return promptTemplate
       .replace('{context}', context)
       .replace('{question}', question);
+  }
+
+  private async getOwnedConversation(
+    userId: string,
+    conversationId: string,
+  ): Promise<ConversationWithDocumentIds> {
+    const conversation = await this.chatRepository.findConversationForUser(
+      conversationId,
+      userId,
+    );
+
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    return conversation;
   }
 }

@@ -35,8 +35,8 @@ Out of scope for this module:
 | Task | File | Status | Notes |
 | --- | --- | --- | --- |
 | Task 01: Planning and Task Files | [task_01.md](task_01.md) | Approved | User reviewed and approved proceeding to Task 02. |
-| Task 02: Conversation Database Schema | [task_02.md](task_02.md) | Review | Added schema and generated migration `0002_cute_abomination.sql`; server build passed. |
-| Task 03: Server Conversation Foundation | [task_03.md](task_03.md) | Pending | Add repository/service foundations for conversation CRUD and message persistence. |
+| Task 02: Conversation Database Schema | [task_02.md](task_02.md) | Approved | User reviewed and approved proceeding to Task 03. |
+| Task 03: Server Conversation Foundation | [task_03.md](task_03.md) | Review | Added DTOs, repository, conversation endpoints, message persistence, and service tests; server build passed. |
 | Task 04: Scoped Retrieval and No Document Overlap | [task_04.md](task_04.md) | Pending | Validate document selections and filter Qdrant by conversation document IDs. |
 | Task 05: SSE Streaming and Full-History Prompting | [task_05.md](task_05.md) | Pending | Add streaming LLM flow and persist assistant messages after stream completion. |
 | Task 06: Client API Types and Services | [task_06.md](task_06.md) | Pending | Add client contracts, endpoint config, services, and stream parser. |
@@ -89,5 +89,6 @@ Non-streaming endpoints must keep the standard response shape:
 ## Completion Summary
 
 - Task 01 is approved.
-- Task 02 is ready for review.
-- Server implementation has started only for database schema and migration work.
+- Task 02 is approved.
+- Task 03 is ready for review.
+- Server implementation now includes database schema, migration, and conversation foundation endpoints.

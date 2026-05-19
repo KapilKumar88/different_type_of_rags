@@ -1,8 +1,10 @@
 import { ragConfig } from '../../../config/rag.config';
+import type { ConversationMessage } from '../../../database/schemas';
 import type { RetrievedChunk } from '../../../types/rag.types';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { LlmService } from '../llm/llm.service';
 import { QdrantService } from '../qdrant/qdrant.service';
+import { ChatRepository } from './chat.repository';
 import { ChatService } from './chat.service';
 
 function createChunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
@@ -21,7 +23,10 @@ describe('ChatService', () => {
   let embeddingsService: jest.Mocked<EmbeddingsService>;
   let qdrantService: jest.Mocked<QdrantService>;
   let llmService: jest.Mocked<LlmService>;
+  let chatRepository: jest.Mocked<ChatRepository>;
   let chatService: ChatService;
+  const createdAt = new Date('2026-01-01T00:00:00.000Z');
+  const updatedAt = new Date('2026-01-01T00:00:00.000Z');
 
   beforeEach(() => {
     embeddingsService = {
@@ -33,10 +38,18 @@ describe('ChatService', () => {
     llmService = {
       generateAnswer: jest.fn(),
     } as unknown as jest.Mocked<LlmService>;
+    chatRepository = {
+      createConversation: jest.fn(),
+      findConversationsByUser: jest.fn(),
+      findConversationForUser: jest.fn(),
+      findMessagesByConversation: jest.fn(),
+      createMessage: jest.fn(),
+    } as unknown as jest.Mocked<ChatRepository>;
     chatService = new ChatService(
       embeddingsService,
       qdrantService,
       llmService,
+      chatRepository,
     );
   });
 
@@ -97,5 +110,151 @@ describe('ChatService', () => {
     });
 
     expect(result.answer).toBe(ragConfig.fallbackAnswer);
+  });
+
+  it('creates a conversation with multiple selected documents', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1', 'document-2'],
+    };
+    chatRepository.createConversation.mockResolvedValue(conversation);
+
+    const result = await chatService.createConversation('user-1', {
+      title: 'Project docs',
+      documentIds: ['document-1', 'document-2'],
+    });
+
+    expect(chatRepository.createConversation).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        title: 'Project docs',
+      },
+      ['document-1', 'document-2'],
+    );
+    expect(result).toEqual(conversation);
+  });
+
+  it('uses a default title when creating a conversation without one', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'New conversation',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    chatRepository.createConversation.mockResolvedValue(conversation);
+
+    await chatService.createConversation('user-1', {
+      documentIds: ['document-1'],
+    });
+
+    expect(chatRepository.createConversation).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        title: 'New conversation',
+      },
+      ['document-1'],
+    );
+  });
+
+  it('fetches a conversation with saved messages in repository order', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    const messages: ConversationMessage[] = [
+      {
+        id: 'message-1',
+        conversationId: 'conversation-1',
+        role: 'user',
+        content: 'What does the document say?',
+        sources: null,
+        createdAt,
+        updatedAt,
+      },
+      {
+        id: 'message-2',
+        conversationId: 'conversation-1',
+        role: 'assistant',
+        content: 'It describes the RAG flow.',
+        sources: [],
+        createdAt,
+        updatedAt,
+      },
+    ];
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    chatRepository.findMessagesByConversation.mockResolvedValue(messages);
+
+    const result = await chatService.getConversation(
+      'user-1',
+      'conversation-1',
+    );
+
+    expect(chatRepository.findConversationForUser).toHaveBeenCalledWith(
+      'conversation-1',
+      'user-1',
+    );
+    expect(chatRepository.findMessagesByConversation).toHaveBeenCalledWith(
+      'conversation-1',
+    );
+    expect(result).toEqual({
+      ...conversation,
+      messages,
+    });
+  });
+
+  it('rejects access to another user conversation with not found', async () => {
+    chatRepository.findConversationForUser.mockResolvedValue(null);
+
+    await expect(
+      chatService.getConversation('user-1', 'conversation-1'),
+    ).rejects.toThrow('Conversation not found');
+    expect(chatRepository.findMessagesByConversation).not.toHaveBeenCalled();
+  });
+
+  it('persists a user message only after confirming conversation ownership', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    const message: ConversationMessage = {
+      id: 'message-1',
+      conversationId: 'conversation-1',
+      role: 'user',
+      content: 'Summarize this.',
+      sources: null,
+      createdAt,
+      updatedAt,
+    };
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    chatRepository.createMessage.mockResolvedValue(message);
+
+    const result = await chatService.createUserMessage(
+      'user-1',
+      'conversation-1',
+      {
+        content: 'Summarize this.',
+      },
+    );
+
+    expect(chatRepository.createMessage).toHaveBeenCalledWith({
+      conversationId: 'conversation-1',
+      role: 'user',
+      content: 'Summarize this.',
+    });
+    expect(result).toEqual(message);
   });
 });

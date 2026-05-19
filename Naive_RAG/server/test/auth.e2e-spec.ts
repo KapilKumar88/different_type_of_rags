@@ -440,6 +440,60 @@ describe('Auth API (e2e)', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Auth rate limiting
+  // -------------------------------------------------------------------------
+
+  describe('auth rate limiting', () => {
+    it('returns 429 after too many login attempts from the same client', async () => {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send(VALID_REGISTER_PAYLOAD);
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await request(app.getHttpServer())
+          .post('/api/v1/auth/login')
+          .send({
+            email: VALID_REGISTER_PAYLOAD.email,
+            password: 'wrongpassword',
+          })
+          .expect(401);
+      }
+
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({
+          email: VALID_REGISTER_PAYLOAD.email,
+          password: 'wrongpassword',
+        })
+        .expect(429);
+
+      expect(response.body.success).toBe(false);
+    });
+
+    it('returns 429 after too many registration attempts from the same client', async () => {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await request(app.getHttpServer())
+          .post('/api/v1/auth/register')
+          .send({
+            ...VALID_REGISTER_PAYLOAD,
+            email: `ada-${attempt}@example.com`,
+          })
+          .expect(201);
+      }
+
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send({
+          ...VALID_REGISTER_PAYLOAD,
+          email: 'ada-rate-limited@example.com',
+        })
+        .expect(429);
+
+      expect(response.body.success).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // GET /api/v1/auth/me — happy path
   // -------------------------------------------------------------------------
 

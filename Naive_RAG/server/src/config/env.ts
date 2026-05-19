@@ -24,6 +24,8 @@ const envSchema = z
     AUTH_COOKIE_SECURE: z.coerce.boolean().default(false),
     AUTH_COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
     AUTH_COOKIE_DOMAIN: z.string().optional(),
+    AUTH_RATE_LIMIT_TTL_MS: z.coerce.number().int().positive().default(60000),
+    AUTH_RATE_LIMIT_LIMIT: z.coerce.number().int().positive().default(5),
     QDRANT_URL: z.url().default('http://localhost:6333'),
     QDRANT_COLLECTION: z.string().min(1).default('documents'),
     QDRANT_VECTOR_SIZE: z.coerce.number().int().positive().default(768),

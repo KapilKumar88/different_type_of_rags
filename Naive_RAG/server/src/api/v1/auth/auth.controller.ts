@@ -6,8 +6,11 @@ import {
   HttpStatus,
   Post,
   Res,
+  UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
+import { authRateLimitConfig } from '../../../config/auth-rate-limit.config';
 import { cookieConfig } from '../../../config/cookie.config';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CurrentUser } from '../../../guard/decorators/current-user.decorator';
@@ -23,6 +26,13 @@ export class AuthController {
 
   @Public()
   @Post('register')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    auth: {
+      limit: authRateLimitConfig.limit,
+      ttl: authRateLimitConfig.ttlMs,
+    },
+  })
   @HttpCode(HttpStatus.CREATED)
   async register(
     @Body(new ZodValidationPipe(registerSchema)) dto: RegisterDto,
@@ -40,6 +50,13 @@ export class AuthController {
 
   @Public()
   @Post('login')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    auth: {
+      limit: authRateLimitConfig.limit,
+      ttl: authRateLimitConfig.ttlMs,
+    },
+  })
   @HttpCode(HttpStatus.OK)
   async login(
     @Body(new ZodValidationPipe(loginSchema)) dto: LoginDto,

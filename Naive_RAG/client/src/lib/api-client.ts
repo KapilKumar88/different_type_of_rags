@@ -72,6 +72,13 @@ export const apiClient = {
     });
   },
 
+  patch<TResponse, TPayload>(path: string, payload: TPayload): Promise<TResponse> {
+    return this.request<TResponse>(path, {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+
   delete<TResponse>(path: string): Promise<TResponse> {
     return this.request<TResponse>(path, { method: "DELETE" });
   },

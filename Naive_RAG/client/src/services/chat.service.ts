@@ -14,6 +14,8 @@ import type {
   ErrorStreamEvent,
   SourcesStreamEvent,
   TokenStreamEvent,
+  UpdateConversationPayload,
+  UpdateConversationResponse,
 } from "@/types/chat.types";
 
 function parseStreamEvent<TEvent>(event: MessageEvent): TEvent {
@@ -45,6 +47,16 @@ export const chatService = {
 
   getConversation(id: string): Promise<ConversationDetailsResponse> {
     return apiClient.get<ConversationDetailsResponse>(apiConfig.endpoints.chat.conversation(id));
+  },
+
+  updateConversation(
+    id: string,
+    payload: UpdateConversationPayload,
+  ): Promise<UpdateConversationResponse> {
+    return apiClient.patch<UpdateConversationResponse, UpdateConversationPayload>(
+      apiConfig.endpoints.chat.updateConversation(id),
+      payload,
+    );
   },
 
   createMessage(

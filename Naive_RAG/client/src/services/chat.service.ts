@@ -25,8 +25,8 @@ function parseStreamEvent<TEvent>(event: MessageEvent): TEvent {
   return JSON.parse(event.data) as TEvent;
 }
 
-function emitStreamError(handlers: ChatStreamHandlers, message: string) {
-  handlers.onError?.({ message });
+function emitStreamError(handlers: ChatStreamHandlers, message: string, recoverable: boolean) {
+  handlers.onError?.({ message, recoverable });
 }
 
 export const chatService = {
@@ -113,9 +113,12 @@ export const chatService = {
 
     eventSource.addEventListener("error", (event) => {
       if ("data" in event && typeof event.data === "string" && event.data) {
-        handlers.onError?.(parseStreamEvent<ErrorStreamEvent>(event as MessageEvent));
+        handlers.onError?.({
+          ...parseStreamEvent<ErrorStreamEvent>(event as MessageEvent),
+          recoverable: false,
+        });
       } else {
-        emitStreamError(handlers, "Unable to stream assistant response");
+        emitStreamError(handlers, "Connection lost while streaming the response", true);
       }
 
       eventSource.close();

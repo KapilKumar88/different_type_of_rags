@@ -10,6 +10,7 @@ import {
   MessageSquarePlus,
   Pencil,
   Plus,
+  RefreshCw,
   Send,
   Sparkles,
   Square,
@@ -63,6 +64,10 @@ type ChatMessage = {
   createdAt?: string;
   sources?: SourceChunk[];
   pending?: boolean;
+  failed?: boolean;
+  retryMessageId?: string;
+  retryConversationId?: string;
+  retryAttempt?: number;
 };
 
 type RenameConversationInput = {
@@ -378,6 +383,131 @@ export function ChatPage() {
     }
   };
 
+  const streamAssistantResponse = ({
+    conversationId,
+    userMessageId,
+    pendingId,
+    retryAttempt,
+  }: {
+    conversationId: string;
+    userMessageId: string;
+    pendingId: string;
+    retryAttempt: number;
+  }) => {
+    const streamId = streamSequenceRef.current + 1;
+    streamSequenceRef.current = streamId;
+    activeStreamIdRef.current = streamId;
+    pendingAssistantIdRef.current = pendingId;
+    setStreaming(true);
+
+    streamCleanupRef.current = chatService.streamMessage(conversationId, userMessageId, {
+      onSources: ({ sources }) => {
+        if (activeStreamIdRef.current !== streamId) {
+          return;
+        }
+
+        setMessages((current) =>
+          current.map((message) => (message.id === pendingId ? { ...message, sources } : message)),
+        );
+      },
+      onToken: ({ token }) => {
+        if (activeStreamIdRef.current !== streamId) {
+          return;
+        }
+
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === pendingId
+              ? { ...message, content: `${message.content}${token}` }
+              : message,
+          ),
+        );
+      },
+      onDone: ({ message }) => {
+        if (activeStreamIdRef.current !== streamId) {
+          return;
+        }
+
+        setMessages((current) =>
+          current.map((currentMessage) =>
+            currentMessage.id === pendingId ? toChatMessage(message) : currentMessage,
+          ),
+        );
+        setStreaming(false);
+        streamCleanupRef.current = null;
+        activeStreamIdRef.current = null;
+        pendingAssistantIdRef.current = null;
+        queryClient.invalidateQueries({ queryKey: conversationsQueryKey });
+        queryClient.invalidateQueries({
+          queryKey: ["chat", "conversation", conversationId],
+        });
+      },
+      onError: ({ message, recoverable }) => {
+        if (activeStreamIdRef.current !== streamId) {
+          return;
+        }
+
+        const canRetry = Boolean(recoverable) && retryAttempt < 3;
+
+        setMessages((current) =>
+          current.map((item) => {
+            if (item.id !== pendingId) {
+              return item;
+            }
+
+            const fallbackContent = canRetry
+              ? "Connection lost while streaming. You can retry this response."
+              : message;
+
+            return {
+              ...item,
+              content: item.content || fallbackContent,
+              pending: false,
+              failed: canRetry,
+              retryConversationId: canRetry ? conversationId : undefined,
+              retryMessageId: canRetry ? userMessageId : undefined,
+              retryAttempt,
+            };
+          }),
+        );
+        toast.error(canRetry ? "Connection lost" : "Response failed", { description: message });
+        setStreaming(false);
+        streamCleanupRef.current = null;
+        activeStreamIdRef.current = null;
+        pendingAssistantIdRef.current = null;
+      },
+    });
+  };
+
+  const retryStream = (message: ChatMessage) => {
+    if (streaming || !message.retryConversationId || !message.retryMessageId || !message.failed) {
+      return;
+    }
+
+    const retryAttempt = (message.retryAttempt ?? 0) + 1;
+
+    setMessages((current) =>
+      current.map((item) =>
+        item.id === message.id
+          ? {
+              ...item,
+              content: "",
+              sources: [],
+              pending: true,
+              failed: false,
+              retryAttempt,
+            }
+          : item,
+      ),
+    );
+    streamAssistantResponse({
+      conversationId: message.retryConversationId,
+      userMessageId: message.retryMessageId,
+      pendingId: message.id,
+      retryAttempt,
+    });
+  };
+
   const send = async (text?: string) => {
     const content = (text ?? input).trim();
 
@@ -399,75 +529,18 @@ export function ChatPage() {
         createdAt: new Date().toISOString(),
         sources: [],
         pending: true,
+        retryConversationId: activeConversationId,
+        retryMessageId: response.data.message.id,
+        retryAttempt: 0,
       };
 
       setMessages((current) => [...current, userMessage, pendingAssistant]);
-      const streamId = streamSequenceRef.current + 1;
-      streamSequenceRef.current = streamId;
-      activeStreamIdRef.current = streamId;
-      pendingAssistantIdRef.current = pendingId;
-
-      streamCleanupRef.current = chatService.streamMessage(
-        activeConversationId,
-        response.data.message.id,
-        {
-          onSources: ({ sources }) => {
-            if (activeStreamIdRef.current !== streamId) {
-              return;
-            }
-
-            setMessages((current) =>
-              current.map((message) =>
-                message.id === pendingId ? { ...message, sources } : message,
-              ),
-            );
-          },
-          onToken: ({ token }) => {
-            if (activeStreamIdRef.current !== streamId) {
-              return;
-            }
-
-            setMessages((current) =>
-              current.map((message) =>
-                message.id === pendingId
-                  ? { ...message, content: `${message.content}${token}` }
-                  : message,
-              ),
-            );
-          },
-          onDone: ({ message }) => {
-            if (activeStreamIdRef.current !== streamId) {
-              return;
-            }
-
-            setMessages((current) =>
-              current.map((currentMessage) =>
-                currentMessage.id === pendingId ? toChatMessage(message) : currentMessage,
-              ),
-            );
-            setStreaming(false);
-            streamCleanupRef.current = null;
-            activeStreamIdRef.current = null;
-            pendingAssistantIdRef.current = null;
-            queryClient.invalidateQueries({ queryKey: conversationsQueryKey });
-            queryClient.invalidateQueries({
-              queryKey: ["chat", "conversation", activeConversationId],
-            });
-          },
-          onError: ({ message }) => {
-            if (activeStreamIdRef.current !== streamId) {
-              return;
-            }
-
-            toast.error("Response failed", { description: message });
-            setMessages((current) => current.filter((item) => item.id !== pendingId));
-            setStreaming(false);
-            streamCleanupRef.current = null;
-            activeStreamIdRef.current = null;
-            pendingAssistantIdRef.current = null;
-          },
-        },
-      );
+      streamAssistantResponse({
+        conversationId: activeConversationId,
+        userMessageId: response.data.message.id,
+        pendingId,
+        retryAttempt: 0,
+      });
     } catch (error) {
       const message = error instanceof ApiClientError ? error.message : "Unable to send message";
       toast.error("Message failed", { description: message });
@@ -537,7 +610,7 @@ export function ChatPage() {
               />
               <div className="space-y-6">
                 {messages.map((message) => (
-                  <MessageRow key={message.id} message={message} />
+                  <MessageRow key={message.id} message={message} onRetry={retryStream} />
                 ))}
               </div>
             </div>
@@ -1068,7 +1141,13 @@ function DocumentScope({ documents }: Readonly<{ documents: RagDocument[] }>) {
   );
 }
 
-function MessageRow({ message }: Readonly<{ message: ChatMessage }>) {
+function MessageRow({
+  message,
+  onRetry,
+}: Readonly<{
+  message: ChatMessage;
+  onRetry: (message: ChatMessage) => void;
+}>) {
   const isUser = message.role === "user";
 
   return (
@@ -1108,6 +1187,17 @@ function MessageRow({ message }: Readonly<{ message: ChatMessage }>) {
         <span className="px-1 text-[11px] text-muted-foreground">
           {formatRelativeTime(message.createdAt)}
         </span>
+        {!isUser && message.failed && message.retryMessageId && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => onRetry(message)}
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry
+          </Button>
+        )}
         {!isUser && !message.pending && (
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <Button

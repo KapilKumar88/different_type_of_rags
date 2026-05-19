@@ -133,6 +133,7 @@ export type DoneStreamEvent = {
 
 export type ErrorStreamEvent = {
   message: string;
+  recoverable?: boolean;
 };
 
 export type ChatStreamHandlers = {

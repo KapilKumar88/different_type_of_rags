@@ -89,6 +89,24 @@ export class ChatRepository {
       .orderBy(asc(conversationMessages.createdAt));
   }
 
+  async findMessageByConversation(
+    conversationId: string,
+    messageId: string,
+  ): Promise<ConversationMessage | null> {
+    const [message] = await this.databaseService.instance
+      .select()
+      .from(conversationMessages)
+      .where(
+        and(
+          eq(conversationMessages.conversationId, conversationId),
+          eq(conversationMessages.id, messageId),
+        ),
+      )
+      .limit(1);
+
+    return message ?? null;
+  }
+
   async createMessage(
     data: NewConversationMessage,
   ): Promise<ConversationMessage> {

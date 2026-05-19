@@ -14,11 +14,31 @@ export class LlmService {
   async generateAnswer(prompt: string): Promise<string> {
     const response = await this.model.invoke([new HumanMessage(prompt)]);
 
-    if (typeof response.content === 'string') {
-      return response.content.trim();
+    return this.contentToText(response.content).trim();
+  }
+
+  async *streamAnswer(prompt: string): AsyncGenerator<string> {
+    const stream = await this.model.stream([new HumanMessage(prompt)]);
+
+    for await (const chunk of stream) {
+      const token = this.contentToText(chunk.content);
+
+      if (token) {
+        yield token;
+      }
+    }
+  }
+
+  private contentToText(content: unknown): string {
+    if (typeof content === 'string') {
+      return content;
     }
 
-    return response.content
+    if (!Array.isArray(content)) {
+      return '';
+    }
+
+    return content
       .map((item) => {
         if (typeof item === 'string') {
           return item;
@@ -30,7 +50,6 @@ export class LlmService {
 
         return '';
       })
-      .join('')
-      .trim();
+      .join('');
   }
 }

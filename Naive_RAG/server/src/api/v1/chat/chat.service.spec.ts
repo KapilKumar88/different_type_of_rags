@@ -1,4 +1,5 @@
 import { ragConfig } from '../../../config/rag.config';
+import type { MessageEvent } from '@nestjs/common';
 import type { ConversationMessage } from '../../../database/schemas';
 import type { RetrievedChunk } from '../../../types/rag.types';
 import { DocumentsService } from '../documents/documents.service';
@@ -18,6 +19,24 @@ function createChunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
     score: 0.91,
     ...overrides,
   };
+}
+
+async function* createTokenStream(tokens: string[]): AsyncGenerator<string> {
+  for (const token of tokens) {
+    yield token;
+  }
+}
+
+async function collectEvents(
+  stream: AsyncGenerator<MessageEvent>,
+): Promise<MessageEvent[]> {
+  const events: MessageEvent[] = [];
+
+  for await (const event of stream) {
+    events.push(event);
+  }
+
+  return events;
 }
 
 describe('ChatService', () => {
@@ -40,12 +59,14 @@ describe('ChatService', () => {
     } as unknown as jest.Mocked<QdrantService>;
     llmService = {
       generateAnswer: jest.fn(),
+      streamAnswer: jest.fn(),
     } as unknown as jest.Mocked<LlmService>;
     chatRepository = {
       createConversation: jest.fn(),
       findConversationsByUser: jest.fn(),
       findConversationForUser: jest.fn(),
       findMessagesByConversation: jest.fn(),
+      findMessageByConversation: jest.fn(),
       createMessage: jest.fn(),
     } as unknown as jest.Mocked<ChatRepository>;
     documentsService = {
@@ -400,5 +421,229 @@ describe('ChatService', () => {
       conversation,
       sources,
     });
+  });
+
+  it('streams an answer with sources and a prompt containing full conversation history', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    const userMessage: ConversationMessage = {
+      id: 'message-3',
+      conversationId: 'conversation-1',
+      role: 'user',
+      content: 'What is the current answer?',
+      sources: null,
+      createdAt,
+      updatedAt,
+    };
+    const history: ConversationMessage[] = [
+      {
+        id: 'message-1',
+        conversationId: 'conversation-1',
+        role: 'user',
+        content: 'What is RAG?',
+        sources: null,
+        createdAt,
+        updatedAt,
+      },
+      {
+        id: 'message-2',
+        conversationId: 'conversation-1',
+        role: 'assistant',
+        content: 'RAG retrieves context before answering.',
+        sources: [],
+        createdAt,
+        updatedAt,
+      },
+      userMessage,
+    ];
+    const sources = [createChunk({ documentId: 'document-1' })];
+    const assistantMessage: ConversationMessage = {
+      id: 'message-4',
+      conversationId: 'conversation-1',
+      role: 'assistant',
+      content: 'Final answer.',
+      sources,
+      createdAt,
+      updatedAt,
+    };
+    chatRepository.findMessageByConversation.mockResolvedValue(userMessage);
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    chatRepository.findMessagesByConversation.mockResolvedValue(history);
+    embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
+    qdrantService.searchByDocumentIds.mockResolvedValue(sources);
+    llmService.streamAnswer.mockReturnValue(
+      createTokenStream(['Final ', 'answer.']),
+    );
+    chatRepository.createMessage.mockResolvedValue(assistantMessage);
+
+    const events = await collectEvents(
+      chatService.streamConversationAnswer(
+        'user-1',
+        'conversation-1',
+        'message-3',
+      ),
+    );
+
+    expect(llmService.streamAnswer).toHaveBeenCalledWith(
+      expect.stringContaining('User: What is RAG?'),
+    );
+    expect(llmService.streamAnswer).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Assistant: RAG retrieves context before answering.',
+      ),
+    );
+    expect(llmService.streamAnswer).toHaveBeenCalledWith(
+      expect.stringContaining('User: What is the current answer?'),
+    );
+    expect(chatRepository.createMessage).toHaveBeenCalledWith({
+      conversationId: 'conversation-1',
+      role: 'assistant',
+      content: 'Final answer.',
+      sources,
+    });
+    expect(events).toEqual([
+      { type: 'sources', data: { sources } },
+      { type: 'token', data: { token: 'Final ' } },
+      { type: 'token', data: { token: 'answer.' } },
+      { type: 'done', data: { message: assistantMessage } },
+    ]);
+  });
+
+  it('streams and stores fallback without calling the LLM when scoped retrieval has no sources', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    const userMessage: ConversationMessage = {
+      id: 'message-1',
+      conversationId: 'conversation-1',
+      role: 'user',
+      content: 'Unknown answer?',
+      sources: null,
+      createdAt,
+      updatedAt,
+    };
+    const assistantMessage: ConversationMessage = {
+      id: 'message-2',
+      conversationId: 'conversation-1',
+      role: 'assistant',
+      content: ragConfig.fallbackAnswer,
+      sources: [],
+      createdAt,
+      updatedAt,
+    };
+    chatRepository.findMessageByConversation.mockResolvedValue(userMessage);
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
+    qdrantService.searchByDocumentIds.mockResolvedValue([]);
+    chatRepository.createMessage.mockResolvedValue(assistantMessage);
+
+    const events = await collectEvents(
+      chatService.streamConversationAnswer(
+        'user-1',
+        'conversation-1',
+        'message-1',
+      ),
+    );
+
+    expect(llmService.streamAnswer).not.toHaveBeenCalled();
+    expect(chatRepository.createMessage).toHaveBeenCalledWith({
+      conversationId: 'conversation-1',
+      role: 'assistant',
+      content: ragConfig.fallbackAnswer,
+      sources: [],
+    });
+    expect(events).toEqual([
+      { type: 'sources', data: { sources: [] } },
+      { type: 'token', data: { token: ragConfig.fallbackAnswer } },
+      { type: 'done', data: { message: assistantMessage } },
+    ]);
+  });
+
+  it('streams and stores fallback when the LLM returns no tokens', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    const userMessage: ConversationMessage = {
+      id: 'message-1',
+      conversationId: 'conversation-1',
+      role: 'user',
+      content: 'Answer?',
+      sources: null,
+      createdAt,
+      updatedAt,
+    };
+    const sources = [createChunk({ documentId: 'document-1' })];
+    const assistantMessage: ConversationMessage = {
+      id: 'message-2',
+      conversationId: 'conversation-1',
+      role: 'assistant',
+      content: ragConfig.fallbackAnswer,
+      sources,
+      createdAt,
+      updatedAt,
+    };
+    chatRepository.findMessageByConversation.mockResolvedValue(userMessage);
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    chatRepository.findMessagesByConversation.mockResolvedValue([userMessage]);
+    embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
+    qdrantService.searchByDocumentIds.mockResolvedValue(sources);
+    llmService.streamAnswer.mockReturnValue(createTokenStream([]));
+    chatRepository.createMessage.mockResolvedValue(assistantMessage);
+
+    const events = await collectEvents(
+      chatService.streamConversationAnswer(
+        'user-1',
+        'conversation-1',
+        'message-1',
+      ),
+    );
+
+    expect(chatRepository.createMessage).toHaveBeenCalledWith({
+      conversationId: 'conversation-1',
+      role: 'assistant',
+      content: ragConfig.fallbackAnswer,
+      sources,
+    });
+    expect(events).toEqual([
+      { type: 'sources', data: { sources } },
+      { type: 'token', data: { token: ragConfig.fallbackAnswer } },
+      { type: 'done', data: { message: assistantMessage } },
+    ]);
+  });
+
+  it('emits an error event when the stream message does not belong to the conversation', async () => {
+    chatRepository.findMessageByConversation.mockResolvedValue(null);
+
+    const events = await collectEvents(
+      chatService.streamConversationAnswer(
+        'user-1',
+        'conversation-1',
+        'message-unknown',
+      ),
+    );
+
+    expect(chatRepository.createMessage).not.toHaveBeenCalled();
+    expect(events).toEqual([
+      {
+        type: 'error',
+        data: { message: 'Conversation message not found' },
+      },
+    ]);
   });
 });

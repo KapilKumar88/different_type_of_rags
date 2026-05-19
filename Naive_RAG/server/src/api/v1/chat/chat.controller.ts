@@ -4,9 +4,12 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  MessageEvent,
   Param,
   Post,
+  Sse,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CurrentUser } from '../../../guard/decorators/current-user.decorator';
 import type { SafeUser } from '../../../types/auth.types';
@@ -16,6 +19,10 @@ import {
   conversationIdSchema,
   type ConversationIdDto,
 } from './dto/conversation-id.dto';
+import {
+  conversationMessageIdSchema,
+  type ConversationMessageIdDto,
+} from './dto/conversation-message-id.dto';
 import {
   createConversationSchema,
   type CreateConversationDto,
@@ -96,6 +103,43 @@ export class ChatController {
       message: 'Message created successfully',
       data: { message },
     };
+  }
+
+  @Sse('conversations/:conversationId/messages/:messageId/stream')
+  streamMessage(
+    @CurrentUser() user: SafeUser,
+    @Param(new ZodValidationPipe(conversationMessageIdSchema))
+    params: ConversationMessageIdDto,
+  ): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      let closed = false;
+
+      void (async () => {
+        for await (const event of this.chatService.streamConversationAnswer(
+          user.id,
+          params.conversationId,
+          params.messageId,
+        )) {
+          if (closed) {
+            break;
+          }
+
+          subscriber.next(event);
+        }
+
+        if (!closed) {
+          subscriber.complete();
+        }
+      })().catch((error: unknown) => {
+        if (!closed) {
+          subscriber.error(error);
+        }
+      });
+
+      return () => {
+        closed = true;
+      };
+    });
   }
 
   @Post('ask')

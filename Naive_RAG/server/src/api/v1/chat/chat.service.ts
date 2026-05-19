@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  MessageEvent,
   NotFoundException,
 } from '@nestjs/common';
 import { ragConfig } from '../../../config/rag.config';
@@ -34,6 +35,8 @@ export type ConversationAnswerContext = {
   sources: RetrievedChunk[];
 };
 
+export type ChatStreamEventType = 'sources' | 'token' | 'done' | 'error';
+
 const promptTemplate = `You are a helpful assistant. Answer the user's question using only the provided context. If the answer is not available in the context, say: I could not find this information in the uploaded document.
 
 Context:
@@ -41,6 +44,16 @@ Context:
 
 Question:
 {question}
+
+Answer:`;
+
+const conversationPromptTemplate = `You are a helpful assistant. Answer the latest user message using only the provided context and the conversation history. If the answer is not available in the context, say: I could not find this information in the uploaded document.
+
+Context:
+{context}
+
+Conversation history:
+{history}
 
 Answer:`;
 
@@ -126,6 +139,61 @@ export class ChatService {
     };
   }
 
+  async *streamConversationAnswer(
+    userId: string,
+    conversationId: string,
+    messageId: string,
+  ): AsyncGenerator<MessageEvent> {
+    try {
+      const userMessage = await this.getUserMessage(conversationId, messageId);
+      const { sources } = await this.getConversationAnswerContext(
+        userId,
+        conversationId,
+        userMessage.content,
+      );
+
+      yield this.createStreamEvent('sources', { sources });
+
+      if (sources.length === 0) {
+        yield* this.persistAndStreamFallback(conversationId, sources);
+        return;
+      }
+
+      const messages =
+        await this.chatRepository.findMessagesByConversation(conversationId);
+      const prompt = this.buildConversationPrompt(sources, messages);
+      const tokens: string[] = [];
+
+      for await (const token of this.llmService.streamAnswer(prompt)) {
+        tokens.push(token);
+        yield this.createStreamEvent('token', { token });
+      }
+
+      const answer = tokens.join('').trim();
+
+      if (!answer) {
+        yield* this.persistAndStreamFallback(conversationId, sources);
+        return;
+      }
+
+      const message = await this.chatRepository.createMessage({
+        conversationId,
+        role: 'assistant',
+        content: answer,
+        sources,
+      });
+
+      yield this.createStreamEvent('done', { message });
+    } catch (error) {
+      yield this.createStreamEvent('error', {
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Unable to stream assistant response',
+      });
+    }
+  }
+
   async ask(dto: AskQuestionDto): Promise<AskQuestionResult> {
     // 1. Embed the user's question into the same vector space as the chunks.
     const questionVector = await this.embeddingsService.embedQuery(
@@ -173,6 +241,64 @@ export class ChatService {
     return promptTemplate
       .replace('{context}', context)
       .replace('{question}', question);
+  }
+
+  private buildConversationPrompt(
+    sources: RetrievedChunk[],
+    messages: ConversationMessage[],
+  ): string {
+    return conversationPromptTemplate
+      .replace('{context}', this.formatContext(sources))
+      .replace('{history}', this.formatConversationHistory(messages));
+  }
+
+  private formatConversationHistory(messages: ConversationMessage[]): string {
+    return messages
+      .map((message) => {
+        const role = message.role === 'assistant' ? 'Assistant' : 'User';
+
+        return `${role}: ${message.content}`;
+      })
+      .join('\n\n');
+  }
+
+  private async getUserMessage(
+    conversationId: string,
+    messageId: string,
+  ): Promise<ConversationMessage> {
+    const message = await this.chatRepository.findMessageByConversation(
+      conversationId,
+      messageId,
+    );
+
+    if (message?.role !== 'user') {
+      throw new NotFoundException('Conversation message not found');
+    }
+
+    return message;
+  }
+
+  private async *persistAndStreamFallback(
+    conversationId: string,
+    sources: RetrievedChunk[],
+  ): AsyncGenerator<MessageEvent> {
+    yield this.createStreamEvent('token', { token: ragConfig.fallbackAnswer });
+
+    const message = await this.chatRepository.createMessage({
+      conversationId,
+      role: 'assistant',
+      content: ragConfig.fallbackAnswer,
+      sources,
+    });
+
+    yield this.createStreamEvent('done', { message });
+  }
+
+  private createStreamEvent(
+    type: ChatStreamEventType,
+    data: Record<string, unknown>,
+  ): MessageEvent {
+    return { type, data };
   }
 
   private async getOwnedConversation(

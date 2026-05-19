@@ -37,8 +37,8 @@ Out of scope for this module:
 | Task 01: Planning and Task Files | [task_01.md](task_01.md) | Approved | User reviewed and approved proceeding to Task 02. |
 | Task 02: Conversation Database Schema | [task_02.md](task_02.md) | Approved | User reviewed and approved proceeding to Task 03. |
 | Task 03: Server Conversation Foundation | [task_03.md](task_03.md) | Approved | User reviewed and approved proceeding to Task 04. |
-| Task 04: Scoped Retrieval and No Document Overlap | [task_04.md](task_04.md) | Review | Added selected-document validation, deduplication, scoped Qdrant search, defensive source filtering, and tests; server build passed. |
-| Task 05: SSE Streaming and Full-History Prompting | [task_05.md](task_05.md) | Pending | Add streaming LLM flow and persist assistant messages after stream completion. |
+| Task 04: Scoped Retrieval and No Document Overlap | [task_04.md](task_04.md) | Approved | User reviewed and approved proceeding to Task 05. |
+| Task 05: SSE Streaming and Full-History Prompting | [task_05.md](task_05.md) | Review | Added LLM token streaming, SSE endpoint, full-history prompt assembly, assistant persistence, fallback streaming, and tests; server build passed. |
 | Task 06: Client API Types and Services | [task_06.md](task_06.md) | Pending | Add client contracts, endpoint config, services, and stream parser. |
 | Task 07: Client Chat UI Integration | [task_07.md](task_07.md) | Pending | Update chat page for conversations, selected documents, history, and streaming. |
 | Task 08: Verification and Context Update | [task_08.md](task_08.md) | Pending | Run builds/tests, perform manual checks, and update test report. |
@@ -91,5 +91,6 @@ Non-streaming endpoints must keep the standard response shape:
 - Task 01 is approved.
 - Task 02 is approved.
 - Task 03 is approved.
-- Task 04 is ready for review.
-- Server implementation now includes database schema, migration, conversation foundation endpoints, and scoped retrieval safeguards.
+- Task 04 is approved.
+- Task 05 is ready for review.
+- Server implementation now includes database schema, migration, conversation endpoints, scoped retrieval safeguards, and SSE answer streaming.

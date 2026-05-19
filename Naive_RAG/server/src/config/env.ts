@@ -1,7 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { z } from 'zod';
 
-const defaultDatabaseUrl =
-  'postgresql://postgres:password@localhost:5432/rag_naive_rag';
 const defaultJwtSecret = 'development-only-auth-secret-change-me';
 
 const envSchema = z
@@ -11,7 +11,7 @@ const envSchema = z
       .default('development'),
     PORT: z.coerce.number().int().positive().default(3000),
     CLIENT_ORIGIN: z.url().default('http://localhost:5173'),
-    DATABASE_URL: z.string().min(1).default(defaultDatabaseUrl),
+    DATABASE_URL: z.url(),
     DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
     JWT_SECRET: z.string().min(32).default(defaultJwtSecret),
     JWT_EXPIRES_IN: z.string().min(1).default('7d'),
@@ -37,14 +37,6 @@ const envSchema = z
       return;
     }
 
-    if (env.DATABASE_URL === defaultDatabaseUrl) {
-      context.addIssue({
-        code: 'custom',
-        path: ['DATABASE_URL'],
-        message: 'DATABASE_URL must be set in production',
-      });
-    }
-
     if (env.JWT_SECRET === defaultJwtSecret) {
       context.addIssue({
         code: 'custom',
@@ -54,6 +46,74 @@ const envSchema = z
     }
   });
 
-export const env = envSchema.parse(process.env);
+function parseEnvFileLine(line: string): [string, string] | null {
+  const trimmedLine = line.trim();
+
+  if (!trimmedLine || trimmedLine.startsWith('#')) {
+    return null;
+  }
+
+  const separatorIndex = trimmedLine.indexOf('=');
+
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const key = trimmedLine.slice(0, separatorIndex).trim();
+  const rawValue = trimmedLine.slice(separatorIndex + 1).trim();
+
+  if (!key) {
+    return null;
+  }
+
+  const value =
+    (rawValue.startsWith('"') && rawValue.endsWith('"')) ||
+    (rawValue.startsWith("'") && rawValue.endsWith("'"))
+      ? rawValue.slice(1, -1)
+      : rawValue;
+
+  return [key, value];
+}
+
+export function loadEnvFile(filePath = resolve(process.cwd(), '.env')) {
+  const fileValues: Record<string, string> = {};
+
+  if (!existsSync(filePath)) {
+    return fileValues;
+  }
+
+  const fileContent = readFileSync(filePath, 'utf8');
+
+  for (const line of fileContent.split(/\r?\n/)) {
+    const parsedLine = parseEnvFileLine(line);
+
+    if (!parsedLine) {
+      continue;
+    }
+
+    const [key, value] = parsedLine;
+    fileValues[key] = value;
+  }
+
+  return fileValues;
+}
+
+export function parseEnvironment(environment: NodeJS.ProcessEnv) {
+  return envSchema.parse(environment);
+}
+
+export function mergeEnvironment(
+  fileValues: Record<string, string>,
+  environment: NodeJS.ProcessEnv,
+) {
+  return {
+    ...fileValues,
+    ...environment,
+  };
+}
+
+export const env = parseEnvironment(
+  mergeEnvironment(loadEnvFile(), process.env),
+);
 
 export type AppEnvironment = typeof env;

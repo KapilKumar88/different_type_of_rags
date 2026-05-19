@@ -97,4 +97,24 @@ describe('AuthController', () => {
       data: { user },
     });
   });
+
+  it('clears the auth cookie on logout', () => {
+    const response = {
+      clearCookie: jest.fn(),
+    } as unknown as Response;
+
+    const result = authController.logout(response);
+
+    expect(response.clearCookie).toHaveBeenCalledWith(
+      cookieConfig.name,
+      expect.objectContaining({
+        path: '/',
+      }),
+    );
+    expect(result).toEqual({
+      success: true,
+      message: 'Logout successful',
+      data: null,
+    });
+  });
 });

@@ -534,4 +534,46 @@ describe('Auth API (e2e)', () => {
       expect(response.body.success).toBe(false);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // POST /api/v1/auth/logout
+  // -------------------------------------------------------------------------
+
+  describe('POST /api/v1/auth/logout', () => {
+    it('returns 200 and expires the auth cookie', async () => {
+      const registerResponse = await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send(VALID_REGISTER_PAYLOAD);
+
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/logout')
+        .set('Cookie', registerResponse.headers['set-cookie'])
+        .expect(200);
+
+      const setCookie = response.headers['set-cookie'] as string | string[];
+      const cookieHeader = Array.isArray(setCookie)
+        ? setCookie.join('; ')
+        : setCookie;
+
+      expect(response.body).toEqual({
+        success: true,
+        message: 'Logout successful',
+        data: null,
+      });
+      expect(cookieHeader).toContain('rag_auth_token=');
+      expect(cookieHeader.toLowerCase()).toContain('expires=thu, 01 jan 1970');
+    });
+
+    it('is idempotent when no auth cookie is present', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/logout')
+        .expect(200);
+
+      expect(response.body).toEqual({
+        success: true,
+        message: 'Logout successful',
+        data: null,
+      });
+    });
+  });
 });

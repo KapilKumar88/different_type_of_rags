@@ -64,12 +64,34 @@ export class AuthController {
     };
   }
 
+  @Public()
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  logout(@Res({ passthrough: true }) response: Response) {
+    this.clearAuthCookie(response);
+
+    return {
+      success: true,
+      message: 'Logout successful',
+      data: null,
+    };
+  }
+
   private setAuthCookie(response: Response, authResult: AuthResult): void {
     response.cookie(cookieConfig.name, authResult.token, {
       httpOnly: true,
       secure: cookieConfig.secure,
       sameSite: cookieConfig.sameSite,
       maxAge: cookieConfig.maxAgeMs,
+      path: '/',
+      domain: cookieConfig.domain,
+    });
+  }
+
+  private clearAuthCookie(response: Response): void {
+    response.clearCookie(cookieConfig.name, {
+      secure: cookieConfig.secure,
+      sameSite: cookieConfig.sameSite,
       path: '/',
       domain: cookieConfig.domain,
     });

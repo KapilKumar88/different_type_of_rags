@@ -18,6 +18,7 @@ import {
 import type { AskQuestionDto } from './dto/ask-question.dto';
 import type { CreateConversationDto } from './dto/create-conversation.dto';
 import type { CreateMessageDto } from './dto/create-message.dto';
+import type { UpdateConversationDto } from './dto/update-conversation.dto';
 
 export type AskQuestionResult = {
   answer: string;
@@ -101,6 +102,25 @@ export class ChatService {
       ...conversation,
       messages,
     };
+  }
+
+  async updateConversation(
+    userId: string,
+    conversationId: string,
+    dto: UpdateConversationDto,
+  ): Promise<ConversationSummary> {
+    await this.getOwnedConversation(userId, conversationId);
+
+    const conversation = await this.chatRepository.updateConversationTitle(
+      conversationId,
+      dto.title,
+    );
+
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    return conversation;
   }
 
   async createUserMessage(

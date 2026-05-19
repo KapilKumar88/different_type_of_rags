@@ -79,6 +79,25 @@ export class ChatRepository {
     return withDocumentIds ?? null;
   }
 
+  async updateConversationTitle(
+    conversationId: string,
+    title: string,
+  ): Promise<ConversationWithDocumentIds | null> {
+    const [conversation] = await this.databaseService.instance
+      .update(conversations)
+      .set({ title, updatedAt: new Date() })
+      .where(eq(conversations.id, conversationId))
+      .returning();
+
+    if (!conversation) {
+      return null;
+    }
+
+    const [withDocumentIds] = await this.attachDocumentIds([conversation]);
+
+    return withDocumentIds ?? null;
+  }
+
   async findMessagesByConversation(
     conversationId: string,
   ): Promise<ConversationMessage[]> {

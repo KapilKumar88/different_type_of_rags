@@ -6,6 +6,7 @@ import {
   HttpStatus,
   MessageEvent,
   Param,
+  Patch,
   Post,
   Sse,
 } from '@nestjs/common';
@@ -31,6 +32,10 @@ import {
   createMessageSchema,
   type CreateMessageDto,
 } from './dto/create-message.dto';
+import {
+  updateConversationSchema,
+  type UpdateConversationDto,
+} from './dto/update-conversation.dto';
 
 @Controller('api/v1/chat')
 export class ChatController {
@@ -80,6 +85,27 @@ export class ChatController {
     return {
       success: true,
       message: 'Conversation retrieved successfully',
+      data: { conversation },
+    };
+  }
+
+  @Patch('conversations/:conversationId')
+  async updateConversation(
+    @CurrentUser() user: SafeUser,
+    @Param(new ZodValidationPipe(conversationIdSchema))
+    params: ConversationIdDto,
+    @Body(new ZodValidationPipe(updateConversationSchema))
+    dto: UpdateConversationDto,
+  ) {
+    const conversation = await this.chatService.updateConversation(
+      user.id,
+      params.conversationId,
+      dto,
+    );
+
+    return {
+      success: true,
+      message: 'Conversation updated successfully',
       data: { conversation },
     };
   }

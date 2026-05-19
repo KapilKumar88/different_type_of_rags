@@ -8,6 +8,7 @@ import { LlmService } from '../llm/llm.service';
 import { QdrantService } from '../qdrant/qdrant.service';
 import { ChatRepository } from './chat.repository';
 import { ChatService } from './chat.service';
+import { updateConversationSchema } from './dto/update-conversation.dto';
 
 function createChunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
   return {
@@ -63,6 +64,7 @@ describe('ChatService', () => {
     } as unknown as jest.Mocked<LlmService>;
     chatRepository = {
       createConversation: jest.fn(),
+      updateConversationTitle: jest.fn(),
       findConversationsByUser: jest.fn(),
       findConversationForUser: jest.fn(),
       findMessagesByConversation: jest.fn(),
@@ -349,6 +351,65 @@ describe('ChatService', () => {
       chatService.getConversation('user-1', 'conversation-1'),
     ).rejects.toThrow('Conversation not found');
     expect(chatRepository.findMessagesByConversation).not.toHaveBeenCalled();
+  });
+
+  it('updates a conversation title after confirming ownership', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    const updatedConversation = {
+      ...conversation,
+      title: 'Flight ops research',
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    chatRepository.updateConversationTitle.mockResolvedValue(
+      updatedConversation,
+    );
+
+    const result = await chatService.updateConversation(
+      'user-1',
+      'conversation-1',
+      {
+        title: 'Flight ops research',
+      },
+    );
+
+    expect(chatRepository.findConversationForUser).toHaveBeenCalledWith(
+      'conversation-1',
+      'user-1',
+    );
+    expect(chatRepository.updateConversationTitle).toHaveBeenCalledWith(
+      'conversation-1',
+      'Flight ops research',
+    );
+    expect(result).toEqual(updatedConversation);
+  });
+
+  it('rejects conversation title updates for conversations the user does not own', async () => {
+    chatRepository.findConversationForUser.mockResolvedValue(null);
+
+    await expect(
+      chatService.updateConversation('user-1', 'conversation-1', {
+        title: 'Flight ops research',
+      }),
+    ).rejects.toThrow('Conversation not found');
+    expect(chatRepository.updateConversationTitle).not.toHaveBeenCalled();
+  });
+
+  it('validates conversation title update payloads', () => {
+    expect(() => updateConversationSchema.parse({ title: '' })).toThrow();
+    expect(() =>
+      updateConversationSchema.parse({ title: 'x'.repeat(181) }),
+    ).toThrow();
+    expect(updateConversationSchema.parse({ title: ' Research notes ' })).toEqual({
+      title: 'Research notes',
+    });
   });
 
   it('persists a user message only after confirming conversation ownership', async () => {

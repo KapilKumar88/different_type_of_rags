@@ -33,7 +33,8 @@ Module scope is limited to:
 | Task 10: Remove Hardcoded Database Credential Default | [task_10.md](task_10.md) | Approved | User approved database credential default removal. |
 | Task 11: Auth Endpoint Rate Limiting | [task_11.md](task_11.md) | Approved | User approved auth endpoint rate limiting. |
 | Task 12: HTTP Security Headers | [task_12.md](task_12.md) | Approved | User approved Helmet security headers. |
-| Task 13: Password Complexity Rules | [task_13.md](task_13.md) | Review | Added server/client registration password complexity validation and tests. |
+| Task 13: Password Complexity Rules | [task_13.md](task_13.md) | Approved | User approved password complexity rules. |
+| Task 14: CSRF Protection | [task_14.md](task_14.md) | Review | Added csrf-csrf double-submit protection and client CSRF token handling. |
 
 ## Key Decisions
 
@@ -69,5 +70,6 @@ Module scope is limited to:
 - Task 10 is approved.
 - Task 11 is approved.
 - Task 12 is approved.
-- Task 13 is in review.
+- Task 13 is approved.
+- Task 14 is in review.
 - Authentication module post-test hardening is in progress.

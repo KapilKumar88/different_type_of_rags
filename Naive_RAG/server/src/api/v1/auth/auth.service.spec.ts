@@ -47,8 +47,8 @@ describe('AuthService', () => {
     const result = await authService.register({
       name: 'Ada Lovelace',
       email: 'ada@example.com',
-      password: 'password123',
-      confirmPassword: 'password123',
+      password: 'TestPass123',
+      confirmPassword: 'TestPass123',
     });
 
     expect(authRepository.create).toHaveBeenCalledWith(
@@ -58,7 +58,7 @@ describe('AuthService', () => {
       }),
     );
     expect(authRepository.create.mock.calls[0]?.[0].passwordHash).not.toBe(
-      'password123',
+      'TestPass123',
     );
     expect(result).toEqual({
       token: 'signed-token',
@@ -78,21 +78,21 @@ describe('AuthService', () => {
       authService.register({
         name: 'Ada Lovelace',
         email: 'ada@example.com',
-        password: 'password123',
-        confirmPassword: 'password123',
+        password: 'TestPass123',
+        confirmPassword: 'TestPass123',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('logs in a user with valid credentials', async () => {
-    const passwordHash = await hash('password123', 12);
+    const passwordHash = await hash('TestPass123', 12);
     const user = createUser({ passwordHash });
     authRepository.findByEmail.mockResolvedValue(user);
     jwtService.signAsync.mockResolvedValue('signed-token');
 
     const result = await authService.login({
       email: 'ada@example.com',
-      password: 'password123',
+      password: 'TestPass123',
     });
 
     expect(result.token).toBe('signed-token');
@@ -109,13 +109,13 @@ describe('AuthService', () => {
     await expect(
       authService.login({
         email: 'missing@example.com',
-        password: 'password123',
+        password: 'TestPass123',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects login when the password is invalid', async () => {
-    const passwordHash = await hash('password123', 12);
+    const passwordHash = await hash('TestPass123', 12);
     authRepository.findByEmail.mockResolvedValue(createUser({ passwordHash }));
 
     await expect(

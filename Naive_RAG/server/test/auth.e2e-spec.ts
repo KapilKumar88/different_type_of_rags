@@ -16,8 +16,8 @@ import type { User } from '../src/database/schemas';
 const VALID_REGISTER_PAYLOAD = {
   name: 'Ada Lovelace',
   email: 'ada@example.com',
-  password: 'password123',
-  confirmPassword: 'password123',
+  password: 'TestPass123',
+  confirmPassword: 'TestPass123',
 } as const;
 
 function buildMockAuthRepository(users: User[]) {
@@ -231,15 +231,15 @@ describe('Auth API (e2e)', () => {
     it('rejects a password shorter than 8 characters', async () => {
       const errors = await registerExpect422({
         ...VALID_REGISTER_PAYLOAD,
-        password: 'short1',
-        confirmPassword: 'short1',
+        password: 'Aa12345',
+        confirmPassword: 'Aa12345',
       });
       expect(errors.password).toBeDefined();
       expect(errors.password.length).toBeGreaterThan(0);
     });
 
     it('rejects a password longer than 128 characters', async () => {
-      const longPassword = 'A'.repeat(129);
+      const longPassword = `A${'a'.repeat(127)}1`;
       const errors = await registerExpect422({
         ...VALID_REGISTER_PAYLOAD,
         password: longPassword,
@@ -249,15 +249,26 @@ describe('Auth API (e2e)', () => {
       expect(errors.password.length).toBeGreaterThan(0);
     });
 
+    it('rejects a password missing required character classes', async () => {
+      const errors = await registerExpect422({
+        ...VALID_REGISTER_PAYLOAD,
+        password: 'aaaaaaaa',
+        confirmPassword: 'aaaaaaaa',
+      });
+      expect(errors.password).toEqual([
+        'Password must contain uppercase, lowercase, and a number',
+      ]);
+    });
+
     it('accepts a password of exactly 8 characters', async () => {
       await request(app.getHttpServer())
         .post('/api/v1/auth/register')
-        .send({ ...VALID_REGISTER_PAYLOAD, password: '12345678', confirmPassword: '12345678' })
+        .send({ ...VALID_REGISTER_PAYLOAD, password: 'Aa123456', confirmPassword: 'Aa123456' })
         .expect(201);
     });
 
     it('accepts a password of exactly 128 characters', async () => {
-      const maxPassword = 'A'.repeat(128);
+      const maxPassword = `A${'a'.repeat(126)}1`;
       await request(app.getHttpServer())
         .post('/api/v1/auth/register')
         .send({ ...VALID_REGISTER_PAYLOAD, password: maxPassword, confirmPassword: maxPassword })
@@ -267,7 +278,7 @@ describe('Auth API (e2e)', () => {
     it('rejects when confirmPassword does not match password', async () => {
       const errors = await registerExpect422({
         ...VALID_REGISTER_PAYLOAD,
-        confirmPassword: 'different_password',
+        confirmPassword: 'OtherPass123',
       });
       expect(errors.confirmPassword).toEqual(['Passwords do not match']);
     });
@@ -382,12 +393,12 @@ describe('Auth API (e2e)', () => {
     }
 
     it('rejects when email is missing', async () => {
-      const errors = await loginExpect422({ password: 'password123' });
+      const errors = await loginExpect422({ password: 'TestPass123' });
       expect(errors.email).toBeDefined();
     });
 
     it('rejects an invalid email format', async () => {
-      const errors = await loginExpect422({ email: 'not-an-email', password: 'password123' });
+      const errors = await loginExpect422({ email: 'not-an-email', password: 'TestPass123' });
       expect(errors.email).toBeDefined();
       expect(errors.email.length).toBeGreaterThan(0);
     });
@@ -412,7 +423,7 @@ describe('Auth API (e2e)', () => {
     it('returns 401 for a non-existent email (does not reveal user enumeration)', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'nobody@example.com', password: 'password123' })
+        .send({ email: 'nobody@example.com', password: 'TestPass123' })
         .expect(401);
 
       expect(response.body).toEqual({

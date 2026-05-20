@@ -35,8 +35,8 @@ describe('AuthController', () => {
       {
         name: user.name,
         email: user.email,
-        password: 'password123',
-        confirmPassword: 'password123',
+        password: 'TestPass123',
+        confirmPassword: 'TestPass123',
       },
       response,
     );
@@ -68,7 +68,7 @@ describe('AuthController', () => {
     const result = await authController.login(
       {
         email: user.email,
-        password: 'password123',
+        password: 'TestPass123',
       },
       response,
     );

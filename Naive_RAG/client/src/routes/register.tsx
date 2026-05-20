@@ -116,7 +116,7 @@ export function RegisterPage() {
             id="password"
             name="password"
             type="password"
-            placeholder="At least 8 characters"
+            placeholder="Uppercase, lowercase, and a number"
             required
             autoComplete="new-password"
             aria-invalid={Boolean(formErrors.password)}

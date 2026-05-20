@@ -32,7 +32,8 @@ Module scope is limited to:
 | Task 09: Server-Side Logout | [task_09.md](task_09.md) | Approved | User approved server logout hardening. |
 | Task 10: Remove Hardcoded Database Credential Default | [task_10.md](task_10.md) | Approved | User approved database credential default removal. |
 | Task 11: Auth Endpoint Rate Limiting | [task_11.md](task_11.md) | Approved | User approved auth endpoint rate limiting. |
-| Task 12: HTTP Security Headers | [task_12.md](task_12.md) | Review | Added Helmet security headers and e2e header assertions. |
+| Task 12: HTTP Security Headers | [task_12.md](task_12.md) | Approved | User approved Helmet security headers. |
+| Task 13: Password Complexity Rules | [task_13.md](task_13.md) | Review | Added server/client registration password complexity validation and tests. |
 
 ## Key Decisions
 
@@ -67,5 +68,6 @@ Module scope is limited to:
 - Task 09 is approved.
 - Task 10 is approved.
 - Task 11 is approved.
-- Task 12 is in review.
+- Task 12 is approved.
+- Task 13 is in review.
 - Authentication module post-test hardening is in progress.

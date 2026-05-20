@@ -62,8 +62,8 @@ Reference URLs:
 
 | Task | File | Status | Focus | Notes |
 | --- | --- | --- | --- | --- |
-| Task 01: Planning and Review Gates | [task_01.md](task_01.md) | Review | Planning | Documentation-only plan created from client analysis. |
-| Task 02: Route-Level Code Splitting | [task_02.md](task_02.md) | Pending | Bundle size | Lazy-load route modules and add route Suspense fallback. |
+| Task 01: Planning and Review Gates | [task_01.md](task_01.md) | Approved | Planning | User approved the plan and requested Task 02 implementation. |
+| Task 02: Route-Level Code Splitting | [task_02.md](task_02.md) | Review | Bundle size | Route modules now lazy-load from `main.tsx`; build emits multiple JS chunks and removes the large-chunk warning. |
 | Task 03: Vite Chunk Strategy and Bundle Audit | [task_03.md](task_03.md) | Pending | Bundle size | Split stable vendor chunks and record before/after output. |
 | Task 04: Chat Module Decomposition | [task_04.md](task_04.md) | Pending | Maintainability/code splitting | Extract chat components/hooks/utilities from the 1561-line route. |
 | Task 05: Chat Streaming Render Performance | [task_05.md](task_05.md) | Pending | Runtime performance | Reduce per-token render pressure and fix hook dependency warnings. |
@@ -99,9 +99,15 @@ Reference URLs:
 
 ## Completion Summary
 
-- Task 01 is in Review.
-- No runtime client code has been changed yet.
+- Task 01 is approved.
+- Task 02 is in Review.
 - Baseline verification captured:
   - `npm run build` passes with the existing large chunk warning.
   - `npm run lint` passes with `9` warnings.
   - `npm audit --audit-level=high` reports `0` high/critical and `6` moderate advisories.
+- Task 02 verification:
+  - `npm run lint` from `client/` passed with the same `9` existing warnings.
+  - `npm run build` from `client/` passed.
+  - Build now emits multiple lazy JS chunks instead of one application JS bundle.
+  - Largest entry-like `index` JS chunk is `363.08 kB` minified / `114.44 kB` gzip, down from the baseline single `1,240.45 kB` minified / `364.41 kB` gzip JS bundle.
+  - Largest lazy route chunk is `app.usage` at `400.23 kB` minified / `110.50 kB` gzip, which should be reviewed in Task 03.

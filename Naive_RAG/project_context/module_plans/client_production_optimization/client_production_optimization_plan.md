@@ -66,8 +66,8 @@ Reference URLs:
 | Task 02: Route-Level Code Splitting | [task_02.md](task_02.md) | Approved | Bundle size | User approved the lazy route split and requested Task 03 implementation. |
 | Task 03: Vite Chunk Strategy and Bundle Audit | [task_03.md](task_03.md) | Approved | Bundle size | User approved moving forward after discussing the manual chunking tradeoff. |
 | Task 04: Chat Module Decomposition | [task_04.md](task_04.md) | Approved | Maintainability/code splitting | User approved the chat extraction and requested Task 05 implementation. |
-| Task 05: Chat Streaming Render Performance | [task_05.md](task_05.md) | Review | Runtime performance | Added stable fallback arrays, memoized selected documents, and buffered SSE tokens per animation frame. |
-| Task 06: Document List and Upload Hardening | [task_06.md](task_06.md) | Pending | Performance/security | Memoize document derivations; validate file size/type client-side. |
+| Task 05: Chat Streaming Render Performance | [task_05.md](task_05.md) | Approved | Runtime performance | User approved the streaming render changes and requested Task 06 implementation. |
+| Task 06: Document List and Upload Hardening | [task_06.md](task_06.md) | Review | Performance/security | Memoized document derivations and added client-side upload type/size validation. |
 | Task 07: Runtime Config and API Resilience | [task_07.md](task_07.md) | Pending | Security/resilience | Validate production env, encode IDs, add timeout/abort handling. |
 | Task 08: Dependency and Static Hosting Security | [task_08.md](task_08.md) | Pending | Security | Address moderate advisories where safe and add static asset security headers. |
 | Task 09: Error Boundaries and Client Logging | [task_09.md](task_09.md) | Pending | Reliability | Replace generic route error behavior and add structured client logger hooks. |
@@ -103,7 +103,8 @@ Reference URLs:
 - Task 02 is approved.
 - Task 03 is approved.
 - Task 04 is approved.
-- Task 05 is in Review.
+- Task 05 is approved.
+- Task 06 is in Review.
 - Baseline verification captured:
   - `npm run build` passes with the existing large chunk warning.
   - `npm run lint` passes with `9` warnings.
@@ -148,3 +149,14 @@ Reference URLs:
   - `npm run lint` from `client/` passed with `7` remaining Fast Refresh warnings only. The previous `app.chat.tsx` hook dependency warnings are gone.
   - `npm run build` from `client/` passed.
   - Manual streaming verification was not run in this environment because the full backend/runtime stack is not active here.
+- Task 06 verification:
+  - Documents page now uses a stable empty documents fallback.
+  - Search query normalization, filtered document list, and total chunk count are memoized.
+  - Upload dialog validates file extension before upload. Allowed extensions: `.pdf`, `.docx`, `.txt`, `.csv`, `.md`.
+  - Upload dialog validates file size before upload. Max size remains aligned with UI copy at `50 MB`.
+  - Invalid files are displayed as failed upload rows and are not sent to the API.
+  - File input is reset after selection so the same file can be reselected after validation or upload.
+  - Existing valid-file upload behavior remains unchanged; uploads still start immediately for valid selected files.
+  - `npm run lint` from `client/` passed with `7` existing Fast Refresh warnings only.
+  - `npm run build` from `client/` passed.
+  - Manual file upload checks were not run because the full backend/runtime stack is not active here.

@@ -47,6 +47,7 @@ type DocStatus = "Indexed";
 type DocType = "pdf" | "docx" | "txt" | "csv" | "md" | "other";
 
 const documentsQueryKey = ["documents"] as const;
+const emptyDocuments: RagDocument[] = [];
 
 export function DocumentsPage() {
   usePageMeta("Documents - RAG Assistant");
@@ -68,14 +69,20 @@ export function DocumentsPage() {
       toast.error("Delete failed", { description: message });
     },
   });
-  const documents = documentsQuery.data?.data.documents ?? [];
-  const filtered = documents.filter((document) => {
-    const matchesQuery = document.fileName.toLowerCase().includes(query.toLowerCase());
-    const matchesStatus = status === "all" || getStatus(document) === status;
+  const documents = documentsQuery.data?.data.documents ?? emptyDocuments;
+  const normalizedQuery = React.useMemo(() => query.trim().toLowerCase(), [query]);
+  const filtered = React.useMemo(() => {
+    return documents.filter((document) => {
+      const matchesQuery =
+        normalizedQuery.length === 0 || document.fileName.toLowerCase().includes(normalizedQuery);
+      const matchesStatus = status === "all" || getStatus(document) === status;
 
-    return matchesQuery && matchesStatus;
-  });
-  const totalChunks = documents.reduce((total, document) => total + document.chunkCount, 0);
+      return matchesQuery && matchesStatus;
+    });
+  }, [documents, normalizedQuery, status]);
+  const totalChunks = React.useMemo(() => {
+    return documents.reduce((total, document) => total + document.chunkCount, 0);
+  }, [documents]);
 
   const refreshDocuments = () => {
     queryClient.invalidateQueries({ queryKey: documentsQueryKey });

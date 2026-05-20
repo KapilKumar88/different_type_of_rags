@@ -30,6 +30,9 @@ type UploadDialogProps = {
   onUploaded?: () => void;
 };
 
+const allowedExtensions = new Set(["pdf", "docx", "txt", "csv", "md"]);
+const maxUploadBytes = 50 * 1024 * 1024;
+
 export function UploadDialog({ children, onUploaded }: Readonly<UploadDialogProps>) {
   const [open, setOpen] = React.useState(false);
   const [files, setFiles] = React.useState<Pending[]>([]);
@@ -37,15 +40,29 @@ export function UploadDialog({ children, onUploaded }: Readonly<UploadDialogProp
 
   const handleFiles = (list: FileList | null) => {
     if (!list?.length) return;
-    const next: Pending[] = Array.from(list).map((f, i) => ({
-      id: `${Date.now()}-${i}`,
-      name: f.name,
-      size: formatBytes(f.size),
-      progress: 12,
-      status: "uploading",
-    }));
+    const selectedFiles = Array.from(list);
+    const next: Pending[] = selectedFiles.map((file, index) => {
+      const validationError = validateFile(file);
+
+      return {
+        id: `${Date.now()}-${index}`,
+        name: file.name,
+        size: formatBytes(file.size),
+        progress: validationError ? 100 : 12,
+        status: validationError ? "failed" : "uploading",
+        error: validationError,
+      };
+    });
+
     setFiles((prev) => [...prev, ...next]);
-    Array.from(list).forEach((file, index) => uploadFile(file, next[index]?.id));
+
+    selectedFiles.forEach((file, index) => {
+      if (next[index]?.status === "failed") {
+        return;
+      }
+
+      uploadFile(file, next[index]?.id);
+    });
   };
 
   const uploadFile = async (file: File, id: string | undefined) => {
@@ -107,7 +124,10 @@ export function UploadDialog({ children, onUploaded }: Readonly<UploadDialogProp
             multiple
             className="hidden"
             accept=".pdf,.docx,.txt,.csv,.md"
-            onChange={(e) => handleFiles(e.target.files)}
+            onChange={(e) => {
+              handleFiles(e.target.files);
+              e.currentTarget.value = "";
+            }}
           />
         </label>
 
@@ -147,6 +167,20 @@ export function UploadDialog({ children, onUploaded }: Readonly<UploadDialogProp
       </DialogContent>
     </Dialog>
   );
+}
+
+function validateFile(file: File): string | undefined {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+
+  if (!extension || !allowedExtensions.has(extension)) {
+    return "Unsupported file type. Upload PDF, DOCX, TXT, CSV, or MD files.";
+  }
+
+  if (file.size > maxUploadBytes) {
+    return `File is too large. Maximum size is ${formatBytes(maxUploadBytes)}.`;
+  }
+
+  return undefined;
 }
 
 function formatBytes(b: number) {

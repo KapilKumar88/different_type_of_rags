@@ -29,6 +29,12 @@ type UpdateConversationDocumentsInput = {
 
 const conversationsQueryKey = ["chat", "conversations"] as const;
 const documentsQueryKey = ["documents"] as const;
+const emptyConversations: NonNullable<
+  Awaited<ReturnType<typeof chatService.listConversations>>["data"]["conversations"]
+> = [];
+const emptyDocuments: NonNullable<
+  Awaited<ReturnType<typeof documentsService.list>>["data"]["documents"]
+> = [];
 
 export function ChatPage() {
   usePageMeta("Chat - RAG Assistant");
@@ -45,6 +51,8 @@ export function ChatPage() {
   const activeStreamIdRef = React.useRef<number | null>(null);
   const streamSequenceRef = React.useRef(0);
   const pendingAssistantIdRef = React.useRef<string | null>(null);
+  const tokenBufferRef = React.useRef("");
+  const tokenFlushFrameRef = React.useRef<number | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const conversationsQuery = useQuery({
@@ -61,16 +69,70 @@ export function ChatPage() {
     enabled: Boolean(activeConversationId),
   });
 
-  const conversations = conversationsQuery.data?.data.conversations ?? [];
-  const documents = documentsQuery.data?.data.documents ?? [];
+  const conversations = conversationsQuery.data?.data.conversations ?? emptyConversations;
+  const documents = documentsQuery.data?.data.documents ?? emptyDocuments;
   const documentMap = React.useMemo(() => {
     return new Map(documents.map((document) => [document.id, document]));
   }, [documents]);
   const activeConversation = conversationQuery.data?.data.conversation ?? null;
-  const selectedDocuments =
-    activeConversation?.documentIds
-      .map((id) => documentMap.get(id))
-      .filter((document): document is RagDocument => Boolean(document)) ?? [];
+  const selectedDocuments = React.useMemo(() => {
+    return (
+      activeConversation?.documentIds
+        .map((id) => documentMap.get(id))
+        .filter((document): document is RagDocument => Boolean(document)) ?? emptyDocuments
+    );
+  }, [activeConversation?.documentIds, documentMap]);
+
+  const flushTokenBuffer = () => {
+    const tokenBatch = tokenBufferRef.current;
+
+    if (!tokenBatch) {
+      tokenFlushFrameRef.current = null;
+      return;
+    }
+
+    const pendingId = pendingAssistantIdRef.current;
+    tokenBufferRef.current = "";
+    tokenFlushFrameRef.current = null;
+
+    if (!pendingId) {
+      return;
+    }
+
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === pendingId
+          ? { ...message, content: `${message.content}${tokenBatch}` }
+          : message,
+      ),
+    );
+  };
+
+  const clearTokenBuffer = () => {
+    if (tokenFlushFrameRef.current !== null) {
+      cancelAnimationFrame(tokenFlushFrameRef.current);
+      tokenFlushFrameRef.current = null;
+    }
+
+    tokenBufferRef.current = "";
+  };
+
+  const queueToken = (token: string) => {
+    tokenBufferRef.current += token;
+
+    if (tokenFlushFrameRef.current !== null) {
+      return;
+    }
+
+    tokenFlushFrameRef.current = requestAnimationFrame(flushTokenBuffer);
+  };
+
+  const takeBufferedTokens = () => {
+    const tokenBatch = tokenBufferRef.current;
+    clearTokenBuffer();
+
+    return tokenBatch;
+  };
 
   React.useEffect(() => {
     if (!activeConversationId && conversations.length > 0) {
@@ -92,7 +154,11 @@ export function ChatPage() {
 
   React.useEffect(() => {
     return () => {
-      closeStream();
+      streamCleanupRef.current?.();
+
+      if (tokenFlushFrameRef.current !== null) {
+        cancelAnimationFrame(tokenFlushFrameRef.current);
+      }
     };
   }, []);
 
@@ -140,6 +206,7 @@ export function ChatPage() {
 
   const closeStream = () => {
     streamCleanupRef.current?.();
+    clearTokenBuffer();
     streamCleanupRef.current = null;
     activeStreamIdRef.current = null;
     pendingAssistantIdRef.current = null;
@@ -150,6 +217,7 @@ export function ChatPage() {
     const pendingId = pendingAssistantIdRef.current;
 
     streamCleanupRef.current?.();
+    clearTokenBuffer();
     streamCleanupRef.current = null;
     activeStreamIdRef.current = null;
     pendingAssistantIdRef.current = null;
@@ -353,18 +421,14 @@ export function ChatPage() {
           return;
         }
 
-        setMessages((current) =>
-          current.map((message) =>
-            message.id === pendingId
-              ? { ...message, content: `${message.content}${token}` }
-              : message,
-          ),
-        );
+        queueToken(token);
       },
       onDone: ({ message }) => {
         if (activeStreamIdRef.current !== streamId) {
           return;
         }
+
+        takeBufferedTokens();
 
         setMessages((current) =>
           current.map((currentMessage) =>
@@ -386,6 +450,7 @@ export function ChatPage() {
         }
 
         const canRetry = Boolean(recoverable) && retryAttempt < 3;
+        const tokenBatch = takeBufferedTokens();
 
         setMessages((current) =>
           current.map((item) => {
@@ -399,7 +464,7 @@ export function ChatPage() {
 
             return {
               ...item,
-              content: item.content || fallbackContent,
+              content: `${item.content}${tokenBatch}` || fallbackContent,
               pending: false,
               failed: canRetry,
               retryConversationId: canRetry ? conversationId : undefined,

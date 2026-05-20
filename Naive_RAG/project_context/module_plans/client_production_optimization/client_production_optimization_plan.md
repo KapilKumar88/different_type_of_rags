@@ -65,8 +65,8 @@ Reference URLs:
 | Task 01: Planning and Review Gates | [task_01.md](task_01.md) | Approved | Planning | User approved the plan and requested Task 02 implementation. |
 | Task 02: Route-Level Code Splitting | [task_02.md](task_02.md) | Approved | Bundle size | User approved the lazy route split and requested Task 03 implementation. |
 | Task 03: Vite Chunk Strategy and Bundle Audit | [task_03.md](task_03.md) | Approved | Bundle size | User approved moving forward after discussing the manual chunking tradeoff. |
-| Task 04: Chat Module Decomposition | [task_04.md](task_04.md) | Review | Maintainability/code splitting | Extracted chat types, constants, helpers, conversation list/header, message display, and dialogs from the route. |
-| Task 05: Chat Streaming Render Performance | [task_05.md](task_05.md) | Pending | Runtime performance | Reduce per-token render pressure and fix hook dependency warnings. |
+| Task 04: Chat Module Decomposition | [task_04.md](task_04.md) | Approved | Maintainability/code splitting | User approved the chat extraction and requested Task 05 implementation. |
+| Task 05: Chat Streaming Render Performance | [task_05.md](task_05.md) | Review | Runtime performance | Added stable fallback arrays, memoized selected documents, and buffered SSE tokens per animation frame. |
 | Task 06: Document List and Upload Hardening | [task_06.md](task_06.md) | Pending | Performance/security | Memoize document derivations; validate file size/type client-side. |
 | Task 07: Runtime Config and API Resilience | [task_07.md](task_07.md) | Pending | Security/resilience | Validate production env, encode IDs, add timeout/abort handling. |
 | Task 08: Dependency and Static Hosting Security | [task_08.md](task_08.md) | Pending | Security | Address moderate advisories where safe and add static asset security headers. |
@@ -102,7 +102,8 @@ Reference URLs:
 - Task 01 is approved.
 - Task 02 is approved.
 - Task 03 is approved.
-- Task 04 is in Review.
+- Task 04 is approved.
+- Task 05 is in Review.
 - Baseline verification captured:
   - `npm run build` passes with the existing large chunk warning.
   - `npm run lint` passes with `9` warnings.
@@ -138,3 +139,12 @@ Reference URLs:
   - `npm run lint` from `client/` passed with the same `9` existing warnings.
   - `npm run build` from `client/` passed.
   - Manual browser verification was not run in this environment because the full backend/runtime stack is not active here.
+- Task 05 verification:
+  - Chat-specific hook dependency warnings are resolved.
+  - `conversations` and `documents` now use stable fallback arrays instead of new `[]` instances per render.
+  - Selected conversation documents are memoized from the active document IDs and document map.
+  - SSE token events now buffer into `requestAnimationFrame`, reducing render pressure from one render per token event to at most one token flush per animation frame.
+  - Stream cleanup cancels pending animation frames on stop, conversation switch, stream error, stream completion, and unmount.
+  - `npm run lint` from `client/` passed with `7` remaining Fast Refresh warnings only. The previous `app.chat.tsx` hook dependency warnings are gone.
+  - `npm run build` from `client/` passed.
+  - Manual streaming verification was not run in this environment because the full backend/runtime stack is not active here.

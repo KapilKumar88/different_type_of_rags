@@ -6,6 +6,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { AuthRepository } from '../src/api/v1/auth/auth.repository';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
+import { configureCsrfProtection } from '../src/common/security/csrf-protection';
 import { configureSecurityHeaders } from '../src/common/security/security-headers';
 import type { User } from '../src/database/schemas';
 
@@ -57,6 +58,55 @@ describe('Auth API (e2e)', () => {
   let app: INestApplication<App>;
   let users: User[];
 
+  function normalizeCookieHeader(cookies: string | string[] | undefined): string {
+    if (!cookies) {
+      return '';
+    }
+
+    return Array.isArray(cookies) ? cookies.join('; ') : cookies;
+  }
+
+  async function getCsrfHeaders(cookies?: string | string[]) {
+    const existingCookieHeader = normalizeCookieHeader(cookies);
+    const tokenRequest = request(app.getHttpServer()).get('/api/v1/csrf-token');
+
+    if (existingCookieHeader) {
+      tokenRequest.set('Cookie', existingCookieHeader);
+    }
+
+    const tokenResponse = await tokenRequest.expect(200);
+    const csrfCookieHeader = normalizeCookieHeader(
+      tokenResponse.headers['set-cookie'] as string | string[] | undefined,
+    );
+    const cookieHeader = [existingCookieHeader, csrfCookieHeader]
+      .filter(Boolean)
+      .join('; ');
+
+    return {
+      cookieHeader,
+      csrfToken: tokenResponse.body.data.csrfToken as string,
+    };
+  }
+
+  async function postWithCsrf(
+    path: string,
+    payload?: Record<string, unknown>,
+    expectedStatus = 200,
+    cookies?: string | string[],
+  ) {
+    const { cookieHeader, csrfToken } = await getCsrfHeaders(cookies);
+    const postRequest = request(app.getHttpServer())
+      .post(path)
+      .set('Cookie', cookieHeader)
+      .set('x-csrf-token', csrfToken);
+
+    if (payload !== undefined) {
+      postRequest.send(payload);
+    }
+
+    return postRequest.expect(expectedStatus);
+  }
+
   beforeEach(async () => {
     users = [];
 
@@ -70,6 +120,7 @@ describe('Auth API (e2e)', () => {
     app = moduleFixture.createNestApplication();
     configureSecurityHeaders(app);
     app.use(cookieParser());
+    configureCsrfProtection(app);
     app.useGlobalFilters(new HttpExceptionFilter());
     await app.init();
   });
@@ -79,15 +130,53 @@ describe('Auth API (e2e)', () => {
   });
 
   // -------------------------------------------------------------------------
+  // CSRF protection
+  // -------------------------------------------------------------------------
+
+  describe('CSRF protection', () => {
+    it('returns a CSRF token and sets the CSRF cookie', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/csrf-token')
+        .expect(200);
+      const setCookie = normalizeCookieHeader(
+        response.headers['set-cookie'] as string | string[] | undefined,
+      );
+
+      expect(response.body).toEqual({
+        success: true,
+        message: 'CSRF token generated',
+        data: {
+          csrfToken: expect.any(String),
+        },
+      });
+      expect(setCookie).toContain('rag_csrf_token=');
+      expect(setCookie.toLowerCase()).toContain('httponly');
+    });
+
+    it('rejects mutating requests without a CSRF token', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({
+          email: VALID_REGISTER_PAYLOAD.email,
+          password: VALID_REGISTER_PAYLOAD.password,
+        })
+        .expect(403);
+
+      expect(response.body.message).toBe('Invalid CSRF token');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // POST /api/v1/auth/register — happy path
   // -------------------------------------------------------------------------
 
   describe('POST /api/v1/auth/register — happy path', () => {
     it('returns 201 with the new user and sets an auth cookie', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD)
-        .expect(201);
+      const response = await postWithCsrf(
+        '/api/v1/auth/register',
+        VALID_REGISTER_PAYLOAD,
+        201,
+      );
 
       expect(response.headers['set-cookie']).toBeDefined();
       expect(response.body).toEqual({
@@ -104,19 +193,21 @@ describe('Auth API (e2e)', () => {
     });
 
     it('does not expose passwordHash in the response', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD)
-        .expect(201);
+      const response = await postWithCsrf(
+        '/api/v1/auth/register',
+        VALID_REGISTER_PAYLOAD,
+        201,
+      );
 
       expect(response.body.data.user.passwordHash).toBeUndefined();
     });
 
     it('normalises email to lowercase', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send({ ...VALID_REGISTER_PAYLOAD, email: 'ADA@EXAMPLE.COM' })
-        .expect(201);
+      const response = await postWithCsrf(
+        '/api/v1/auth/register',
+        { ...VALID_REGISTER_PAYLOAD, email: 'ADA@EXAMPLE.COM' },
+        201,
+      );
 
       expect(response.body.data.user.email).toBe('ada@example.com');
     });
@@ -128,10 +219,11 @@ describe('Auth API (e2e)', () => {
 
   describe('POST /api/v1/auth/register — cookie security attributes', () => {
     it('sets the auth cookie with HttpOnly flag', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD)
-        .expect(201);
+      const response = await postWithCsrf(
+        '/api/v1/auth/register',
+        VALID_REGISTER_PAYLOAD,
+        201,
+      );
 
       const setCookie = response.headers['set-cookie'] as string | string[];
       const cookieHeader = Array.isArray(setCookie)
@@ -142,10 +234,11 @@ describe('Auth API (e2e)', () => {
     });
 
     it('sets the auth cookie with the configured name', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD)
-        .expect(201);
+      const response = await postWithCsrf(
+        '/api/v1/auth/register',
+        VALID_REGISTER_PAYLOAD,
+        201,
+      );
 
       const setCookie = response.headers['set-cookie'] as string | string[];
       const cookieHeader = Array.isArray(setCookie)
@@ -162,10 +255,7 @@ describe('Auth API (e2e)', () => {
 
   describe('POST /api/v1/auth/register — input validation', () => {
     async function registerExpect422(payload: Record<string, unknown>) {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(payload)
-        .expect(422);
+      const response = await postWithCsrf('/api/v1/auth/register', payload, 422);
 
       expect(response.body.success).toBe(false);
       expect(response.body.message).toBe('Validation failed');
@@ -198,17 +288,19 @@ describe('Auth API (e2e)', () => {
     });
 
     it('accepts a name of exactly 2 characters', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send({ ...VALID_REGISTER_PAYLOAD, name: 'Jo' })
-        .expect(201);
+      await postWithCsrf(
+        '/api/v1/auth/register',
+        { ...VALID_REGISTER_PAYLOAD, name: 'Jo' },
+        201,
+      );
     });
 
     it('accepts a name of exactly 120 characters', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send({ ...VALID_REGISTER_PAYLOAD, name: 'A'.repeat(120) })
-        .expect(201);
+      await postWithCsrf(
+        '/api/v1/auth/register',
+        { ...VALID_REGISTER_PAYLOAD, name: 'A'.repeat(120) },
+        201,
+      );
     });
 
     it('rejects an invalid email format', async () => {
@@ -261,18 +353,28 @@ describe('Auth API (e2e)', () => {
     });
 
     it('accepts a password of exactly 8 characters', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send({ ...VALID_REGISTER_PAYLOAD, password: 'Aa123456', confirmPassword: 'Aa123456' })
-        .expect(201);
+      await postWithCsrf(
+        '/api/v1/auth/register',
+        {
+          ...VALID_REGISTER_PAYLOAD,
+          password: 'Aa123456',
+          confirmPassword: 'Aa123456',
+        },
+        201,
+      );
     });
 
     it('accepts a password of exactly 128 characters', async () => {
       const maxPassword = `A${'a'.repeat(126)}1`;
-      await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send({ ...VALID_REGISTER_PAYLOAD, password: maxPassword, confirmPassword: maxPassword })
-        .expect(201);
+      await postWithCsrf(
+        '/api/v1/auth/register',
+        {
+          ...VALID_REGISTER_PAYLOAD,
+          password: maxPassword,
+          confirmPassword: maxPassword,
+        },
+        201,
+      );
     });
 
     it('rejects when confirmPassword does not match password', async () => {
@@ -296,14 +398,13 @@ describe('Auth API (e2e)', () => {
 
   describe('POST /api/v1/auth/register — business rule violations', () => {
     it('returns 409 when the email is already registered', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD);
+      await postWithCsrf('/api/v1/auth/register', VALID_REGISTER_PAYLOAD, 201);
 
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD)
-        .expect(409);
+      const response = await postWithCsrf(
+        '/api/v1/auth/register',
+        VALID_REGISTER_PAYLOAD,
+        409,
+      );
 
       expect(response.body).toEqual({
         success: false,
@@ -313,14 +414,13 @@ describe('Auth API (e2e)', () => {
     });
 
     it('treats email registration as case-insensitive (normalised to lowercase)', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD);
+      await postWithCsrf('/api/v1/auth/register', VALID_REGISTER_PAYLOAD, 201);
 
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send({ ...VALID_REGISTER_PAYLOAD, email: 'ADA@EXAMPLE.COM' })
-        .expect(409);
+      const response = await postWithCsrf(
+        '/api/v1/auth/register',
+        { ...VALID_REGISTER_PAYLOAD, email: 'ADA@EXAMPLE.COM' },
+        409,
+      );
 
       expect(response.body.message).toBe('Email already exists');
     });
@@ -332,16 +432,18 @@ describe('Auth API (e2e)', () => {
 
   describe('POST /api/v1/auth/login — happy path', () => {
     beforeEach(async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD);
+      await postWithCsrf('/api/v1/auth/register', VALID_REGISTER_PAYLOAD, 201);
     });
 
     it('returns 200 with the user and sets an auth cookie', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/login')
-        .send({ email: VALID_REGISTER_PAYLOAD.email, password: VALID_REGISTER_PAYLOAD.password })
-        .expect(200);
+      const response = await postWithCsrf(
+        '/api/v1/auth/login',
+        {
+          email: VALID_REGISTER_PAYLOAD.email,
+          password: VALID_REGISTER_PAYLOAD.password,
+        },
+        200,
+      );
 
       expect(response.headers['set-cookie']).toBeDefined();
       expect(response.body).toMatchObject({
@@ -358,19 +460,27 @@ describe('Auth API (e2e)', () => {
     });
 
     it('does not expose passwordHash in the response', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/login')
-        .send({ email: VALID_REGISTER_PAYLOAD.email, password: VALID_REGISTER_PAYLOAD.password })
-        .expect(200);
+      const response = await postWithCsrf(
+        '/api/v1/auth/login',
+        {
+          email: VALID_REGISTER_PAYLOAD.email,
+          password: VALID_REGISTER_PAYLOAD.password,
+        },
+        200,
+      );
 
       expect(response.body.data.user.passwordHash).toBeUndefined();
     });
 
     it('accepts email in any case (normalised to lowercase)', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/login')
-        .send({ email: 'ADA@EXAMPLE.COM', password: VALID_REGISTER_PAYLOAD.password })
-        .expect(200);
+      const response = await postWithCsrf(
+        '/api/v1/auth/login',
+        {
+          email: 'ADA@EXAMPLE.COM',
+          password: VALID_REGISTER_PAYLOAD.password,
+        },
+        200,
+      );
 
       expect(response.body.data.user.email).toBe('ada@example.com');
     });
@@ -382,10 +492,7 @@ describe('Auth API (e2e)', () => {
 
   describe('POST /api/v1/auth/login — input validation', () => {
     async function loginExpect422(payload: Record<string, unknown>) {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/login')
-        .send(payload)
-        .expect(422);
+      const response = await postWithCsrf('/api/v1/auth/login', payload, 422);
 
       expect(response.body.success).toBe(false);
       expect(response.body.message).toBe('Validation failed');
@@ -421,10 +528,11 @@ describe('Auth API (e2e)', () => {
 
   describe('POST /api/v1/auth/login — credential failures', () => {
     it('returns 401 for a non-existent email (does not reveal user enumeration)', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/login')
-        .send({ email: 'nobody@example.com', password: 'TestPass123' })
-        .expect(401);
+      const response = await postWithCsrf(
+        '/api/v1/auth/login',
+        { email: 'nobody@example.com', password: 'TestPass123' },
+        401,
+      );
 
       expect(response.body).toEqual({
         success: false,
@@ -434,14 +542,13 @@ describe('Auth API (e2e)', () => {
     });
 
     it('returns 401 for a correct email with a wrong password', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD);
+      await postWithCsrf('/api/v1/auth/register', VALID_REGISTER_PAYLOAD, 201);
 
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/login')
-        .send({ email: VALID_REGISTER_PAYLOAD.email, password: 'wrongpassword' })
-        .expect(401);
+      const response = await postWithCsrf(
+        '/api/v1/auth/login',
+        { email: VALID_REGISTER_PAYLOAD.email, password: 'wrongpassword' },
+        401,
+      );
 
       // Same message as non-existent user to prevent user enumeration
       expect(response.body).toEqual({
@@ -458,49 +565,51 @@ describe('Auth API (e2e)', () => {
 
   describe('auth rate limiting', () => {
     it('returns 429 after too many login attempts from the same client', async () => {
-      await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD);
+      await postWithCsrf('/api/v1/auth/register', VALID_REGISTER_PAYLOAD, 201);
 
       for (let attempt = 0; attempt < 5; attempt += 1) {
-        await request(app.getHttpServer())
-          .post('/api/v1/auth/login')
-          .send({
+        await postWithCsrf(
+          '/api/v1/auth/login',
+          {
             email: VALID_REGISTER_PAYLOAD.email,
             password: 'wrongpassword',
-          })
-          .expect(401);
+          },
+          401,
+        );
       }
 
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/login')
-        .send({
+      const response = await postWithCsrf(
+        '/api/v1/auth/login',
+        {
           email: VALID_REGISTER_PAYLOAD.email,
           password: 'wrongpassword',
-        })
-        .expect(429);
+        },
+        429,
+      );
 
       expect(response.body.success).toBe(false);
     });
 
     it('returns 429 after too many registration attempts from the same client', async () => {
       for (let attempt = 0; attempt < 5; attempt += 1) {
-        await request(app.getHttpServer())
-          .post('/api/v1/auth/register')
-          .send({
+        await postWithCsrf(
+          '/api/v1/auth/register',
+          {
             ...VALID_REGISTER_PAYLOAD,
             email: `ada-${attempt}@example.com`,
-          })
-          .expect(201);
+          },
+          201,
+        );
       }
 
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send({
+      const response = await postWithCsrf(
+        '/api/v1/auth/register',
+        {
           ...VALID_REGISTER_PAYLOAD,
           email: 'ada-rate-limited@example.com',
-        })
-        .expect(429);
+        },
+        429,
+      );
 
       expect(response.body.success).toBe(false);
     });
@@ -512,9 +621,11 @@ describe('Auth API (e2e)', () => {
 
   describe('GET /api/v1/auth/me — happy path', () => {
     it('returns the authenticated user when a valid cookie is present', async () => {
-      const registerResponse = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD);
+      const registerResponse = await postWithCsrf(
+        '/api/v1/auth/register',
+        VALID_REGISTER_PAYLOAD,
+        201,
+      );
       const authCookie = registerResponse.headers['set-cookie'];
 
       const response = await request(app.getHttpServer())
@@ -536,9 +647,11 @@ describe('Auth API (e2e)', () => {
     });
 
     it('does not expose passwordHash in the /me response', async () => {
-      const registerResponse = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD);
+      const registerResponse = await postWithCsrf(
+        '/api/v1/auth/register',
+        VALID_REGISTER_PAYLOAD,
+        201,
+      );
 
       const response = await request(app.getHttpServer())
         .get('/api/v1/auth/me')
@@ -608,14 +721,18 @@ describe('Auth API (e2e)', () => {
 
   describe('POST /api/v1/auth/logout', () => {
     it('returns 200 and expires the auth cookie', async () => {
-      const registerResponse = await request(app.getHttpServer())
-        .post('/api/v1/auth/register')
-        .send(VALID_REGISTER_PAYLOAD);
+      const registerResponse = await postWithCsrf(
+        '/api/v1/auth/register',
+        VALID_REGISTER_PAYLOAD,
+        201,
+      );
 
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/logout')
-        .set('Cookie', registerResponse.headers['set-cookie'])
-        .expect(200);
+      const response = await postWithCsrf(
+        '/api/v1/auth/logout',
+        undefined,
+        200,
+        registerResponse.headers['set-cookie'] as string | string[],
+      );
 
       const setCookie = response.headers['set-cookie'] as string | string[];
       const cookieHeader = Array.isArray(setCookie)
@@ -632,9 +749,7 @@ describe('Auth API (e2e)', () => {
     });
 
     it('is idempotent when no auth cookie is present', async () => {
-      const response = await request(app.getHttpServer())
-        .post('/api/v1/auth/logout')
-        .expect(200);
+      const response = await postWithCsrf('/api/v1/auth/logout');
 
       expect(response.body).toEqual({
         success: true,

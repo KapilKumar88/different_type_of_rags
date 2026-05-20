@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { z } from 'zod';
 
 const defaultJwtSecret = 'development-only-auth-secret-change-me';
+const defaultCsrfSecret = 'development-only-csrf-secret-change-me';
 
 const envSchema = z
   .object({
@@ -26,6 +27,8 @@ const envSchema = z
     AUTH_COOKIE_DOMAIN: z.string().optional(),
     AUTH_RATE_LIMIT_TTL_MS: z.coerce.number().int().positive().default(60000),
     AUTH_RATE_LIMIT_LIMIT: z.coerce.number().int().positive().default(5),
+    CSRF_COOKIE_NAME: z.string().min(1).default('rag_csrf_token'),
+    CSRF_SECRET: z.string().min(32).default(defaultCsrfSecret),
     QDRANT_URL: z.url().default('http://localhost:6333'),
     QDRANT_COLLECTION: z.string().min(1).default('documents'),
     QDRANT_VECTOR_SIZE: z.coerce.number().int().positive().default(768),
@@ -44,6 +47,14 @@ const envSchema = z
         code: 'custom',
         path: ['JWT_SECRET'],
         message: 'JWT_SECRET must be set in production',
+      });
+    }
+
+    if (env.CSRF_SECRET === defaultCsrfSecret) {
+      context.addIssue({
+        code: 'custom',
+        path: ['CSRF_SECRET'],
+        message: 'CSRF_SECRET must be set in production',
       });
     }
   });

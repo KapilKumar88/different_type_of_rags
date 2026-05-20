@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { configureCsrfProtection } from '../src/common/security/csrf-protection';
 import { configureSecurityHeaders } from '../src/common/security/security-headers';
 
 describe('AppController (e2e)', () => {
@@ -15,6 +17,8 @@ describe('AppController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     configureSecurityHeaders(app);
+    app.use(cookieParser());
+    configureCsrfProtection(app);
     await app.init();
   });
 

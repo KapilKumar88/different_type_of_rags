@@ -33,6 +33,7 @@
     "@qdrant/js-client-rest": "^1.18.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
+    "csrf-csrf": "^4.0.3",
     "drizzle-orm": "^0.45.2",
     "helmet": "^8.1.0",
     "mammoth": "^1.12.0",

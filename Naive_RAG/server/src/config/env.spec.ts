@@ -57,4 +57,14 @@ describe('server environment config', () => {
       'postgresql://shell:secret@localhost:5432/rag_shell',
     );
   });
+
+  it('rejects the default CSRF secret in production', () => {
+    expect(() =>
+      parseEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        JWT_SECRET: 'production-auth-secret-with-32-characters',
+      }),
+    ).toThrow();
+  });
 });

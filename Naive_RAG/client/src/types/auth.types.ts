@@ -20,6 +20,10 @@ export type AuthData = {
   user: AuthUser;
 };
 
+export type CsrfData = {
+  csrfToken: string;
+};
+
 export type ApiSuccessResponse<TData> = {
   success: true;
   message: string;
@@ -35,5 +39,7 @@ export type ApiErrorResponse<TData = unknown> = {
 export type AuthResponse = ApiSuccessResponse<AuthData>;
 
 export type LogoutResponse = ApiSuccessResponse<null>;
+
+export type CsrfResponse = ApiSuccessResponse<CsrfData>;
 
 export type AuthStatus = "unknown" | "authenticated" | "unauthenticated";

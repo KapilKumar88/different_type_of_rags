@@ -3,6 +3,7 @@ import { envConfig } from "./env.config";
 export const apiConfig = {
   baseUrl: envConfig.apiBaseUrl,
   endpoints: {
+    csrf: "/api/v1/csrf-token",
     auth: {
       register: "/api/v1/auth/register",
       login: "/api/v1/auth/login",

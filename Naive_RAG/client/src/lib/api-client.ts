@@ -1,5 +1,5 @@
 import { apiConfig } from "@/config/api.config";
-import type { ApiErrorResponse } from "@/types/auth.types";
+import type { ApiErrorResponse, CsrfResponse } from "@/types/auth.types";
 
 type RequestOptions = Omit<RequestInit, "body" | "credentials"> & {
   body?: unknown;
@@ -17,6 +17,8 @@ export class ApiClientError extends Error {
   }
 }
 
+let csrfToken: string | null = null;
+
 async function parseResponse(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type");
 
@@ -27,38 +29,101 @@ async function parseResponse(response: Response): Promise<unknown> {
   return response.text();
 }
 
+function isUnsafeMethod(method: string | undefined): boolean {
+  const normalizedMethod = method?.toUpperCase() ?? "GET";
+
+  return !["GET", "HEAD", "OPTIONS"].includes(normalizedMethod);
+}
+
+function shouldInvalidateCsrfToken(path: string): boolean {
+  return [
+    apiConfig.endpoints.auth.login,
+    apiConfig.endpoints.auth.logout,
+    apiConfig.endpoints.auth.register,
+  ].includes(path);
+}
+
+async function getCsrfToken(): Promise<string> {
+  if (csrfToken) {
+    return csrfToken;
+  }
+
+  const response = await fetch(`${apiConfig.baseUrl}${apiConfig.endpoints.csrf}`, {
+    credentials: "include",
+  });
+  const parsedResponse = (await parseResponse(response)) as Partial<CsrfResponse>;
+
+  if (!response.ok || !parsedResponse.data?.csrfToken) {
+    throw new ApiClientError("Unable to prepare request", response.status, parsedResponse);
+  }
+
+  csrfToken = parsedResponse.data.csrfToken;
+  return csrfToken;
+}
+
+async function addCsrfHeader(path: string, options: RequestOptions, headers: Headers) {
+  if (!isUnsafeMethod(options.method) || path === apiConfig.endpoints.csrf) {
+    return;
+  }
+
+  headers.set("X-CSRF-Token", await getCsrfToken());
+}
+
+function isCsrfError(error: ApiClientError): boolean {
+  return error.status === 403 && error.message === "Invalid CSRF token";
+}
+
 export const apiClient = {
-  async request<TResponse>(path: string, options: RequestOptions = {}): Promise<TResponse> {
-    const headers = new Headers(options.headers);
-    const isFormData = options.body instanceof FormData;
+  async request<TResponse>(
+    path: string,
+    options: RequestOptions = {},
+    retryOnCsrfError = true,
+  ): Promise<TResponse> {
+    try {
+      const headers = new Headers(options.headers);
+      const isFormData = options.body instanceof FormData;
 
-    if (options.body !== undefined && !isFormData && !headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json");
+      if (options.body !== undefined && !isFormData && !headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
+
+      const body =
+        options.body === undefined || isFormData
+          ? (options.body as BodyInit | undefined)
+          : JSON.stringify(options.body);
+
+      await addCsrfHeader(path, options, headers);
+
+      const response = await fetch(`${apiConfig.baseUrl}${path}`, {
+        ...options,
+        headers,
+        credentials: "include",
+        body,
+      });
+      const parsedResponse = await parseResponse(response);
+
+      if (!response.ok) {
+        const errorResponse = parsedResponse as Partial<ApiErrorResponse>;
+        throw new ApiClientError(
+          errorResponse.message ?? "Request failed",
+          response.status,
+          parsedResponse,
+        );
+      }
+
+      if (shouldInvalidateCsrfToken(path)) {
+        csrfToken = null;
+      }
+
+      return parsedResponse as TResponse;
+    } catch (error) {
+      if (retryOnCsrfError && error instanceof ApiClientError && isCsrfError(error)) {
+        csrfToken = null;
+        return this.request<TResponse>(path, options, false);
+      }
+
+      throw error;
     }
-
-    const body =
-      options.body === undefined || isFormData
-        ? (options.body as BodyInit | undefined)
-        : JSON.stringify(options.body);
-
-    const response = await fetch(`${apiConfig.baseUrl}${path}`, {
-      ...options,
-      headers,
-      credentials: "include",
-      body,
-    });
-    const parsedResponse = await parseResponse(response);
-
-    if (!response.ok) {
-      const errorResponse = parsedResponse as Partial<ApiErrorResponse>;
-      throw new ApiClientError(
-        errorResponse.message ?? "Request failed",
-        response.status,
-        parsedResponse,
-      );
-    }
-
-    return parsedResponse as TResponse;
   },
 
   get<TResponse>(path: string): Promise<TResponse> {

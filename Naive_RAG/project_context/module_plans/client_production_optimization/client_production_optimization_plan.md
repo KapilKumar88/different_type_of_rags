@@ -63,9 +63,9 @@ Reference URLs:
 | Task | File | Status | Focus | Notes |
 | --- | --- | --- | --- | --- |
 | Task 01: Planning and Review Gates | [task_01.md](task_01.md) | Approved | Planning | User approved the plan and requested Task 02 implementation. |
-| Task 02: Route-Level Code Splitting | [task_02.md](task_02.md) | Review | Bundle size | Route modules now lazy-load from `main.tsx`; build emits multiple JS chunks and removes the large-chunk warning. |
-| Task 03: Vite Chunk Strategy and Bundle Audit | [task_03.md](task_03.md) | Pending | Bundle size | Split stable vendor chunks and record before/after output. |
-| Task 04: Chat Module Decomposition | [task_04.md](task_04.md) | Pending | Maintainability/code splitting | Extract chat components/hooks/utilities from the 1561-line route. |
+| Task 02: Route-Level Code Splitting | [task_02.md](task_02.md) | Approved | Bundle size | User approved the lazy route split and requested Task 03 implementation. |
+| Task 03: Vite Chunk Strategy and Bundle Audit | [task_03.md](task_03.md) | Approved | Bundle size | User approved moving forward after discussing the manual chunking tradeoff. |
+| Task 04: Chat Module Decomposition | [task_04.md](task_04.md) | Review | Maintainability/code splitting | Extracted chat types, constants, helpers, conversation list/header, message display, and dialogs from the route. |
 | Task 05: Chat Streaming Render Performance | [task_05.md](task_05.md) | Pending | Runtime performance | Reduce per-token render pressure and fix hook dependency warnings. |
 | Task 06: Document List and Upload Hardening | [task_06.md](task_06.md) | Pending | Performance/security | Memoize document derivations; validate file size/type client-side. |
 | Task 07: Runtime Config and API Resilience | [task_07.md](task_07.md) | Pending | Security/resilience | Validate production env, encode IDs, add timeout/abort handling. |
@@ -100,7 +100,9 @@ Reference URLs:
 ## Completion Summary
 
 - Task 01 is approved.
-- Task 02 is in Review.
+- Task 02 is approved.
+- Task 03 is approved.
+- Task 04 is in Review.
 - Baseline verification captured:
   - `npm run build` passes with the existing large chunk warning.
   - `npm run lint` passes with `9` warnings.
@@ -111,3 +113,28 @@ Reference URLs:
   - Build now emits multiple lazy JS chunks instead of one application JS bundle.
   - Largest entry-like `index` JS chunk is `363.08 kB` minified / `114.44 kB` gzip, down from the baseline single `1,240.45 kB` minified / `364.41 kB` gzip JS bundle.
   - Largest lazy route chunk is `app.usage` at `400.23 kB` minified / `110.50 kB` gzip, which should be reviewed in Task 03.
+- Task 03 verification:
+  - `npm run lint` from `client/` passed with the same `9` existing warnings.
+  - `npm run build` from `client/` passed with no large-chunk warning.
+  - Vite now creates named vendor chunks: `vendor-react`, `vendor-query-state`, `vendor-markdown`, and `vendor-charts`.
+  - Generated `index.html` preloads only `vendor-react` and `vendor-query-state` with the app entry; `vendor-markdown` and `vendor-charts` remain lazy route dependencies.
+  - Entry app chunk after manual chunks: `45.18 kB` minified / `13.87 kB` gzip.
+  - Eager vendor chunks: `vendor-react` at `283.58 kB` minified / `90.93 kB` gzip and `vendor-query-state` at `36.25 kB` minified / `10.77 kB` gzip.
+  - Lazy heavy vendors: `vendor-charts` at `392.93 kB` minified / `108.04 kB` gzip and `vendor-markdown` at `156.79 kB` minified / `47.47 kB` gzip.
+  - `app.usage` route code dropped from `400.23 kB` minified / `110.50 kB` gzip to `7.77 kB` minified / `2.61 kB` gzip because Recharts/D3 moved into `vendor-charts`.
+  - `app.chat` route code dropped from `194.05 kB` minified / `58.62 kB` gzip to `37.21 kB` minified / `11.08 kB` gzip because Markdown dependencies moved into `vendor-markdown`.
+- Task 04 verification:
+  - `app.chat.tsx` dropped from `1561` lines to `667` lines.
+  - Added focused chat files:
+    - `src/types/chat-ui.types.ts`
+    - `src/components/chat/chat.constants.ts`
+    - `src/components/chat/chat.helpers.ts`
+    - `src/components/chat/conversation-header.tsx`
+    - `src/components/chat/conversation-list.tsx`
+    - `src/components/chat/conversation-dialogs.tsx`
+    - `src/components/chat/message-display.tsx`
+  - Route behavior remains owned by `app.chat.tsx`: queries, mutations, active conversation state, stream lifecycle, and send/retry/stop logic.
+  - Presentational UI and formatting helpers moved out of the route.
+  - `npm run lint` from `client/` passed with the same `9` existing warnings.
+  - `npm run build` from `client/` passed.
+  - Manual browser verification was not run in this environment because the full backend/runtime stack is not active here.

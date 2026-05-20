@@ -84,6 +84,21 @@
 
 ---
 
+## Remediation Status
+
+| ID | Finding | Status | Remediation |
+|----|---------|--------|-------------|
+| SEC-01 | No server-side logout | ✅ Fixed | Task 09 added `POST /api/v1/auth/logout` and wired client sign-out to clear the HttpOnly cookie server-side. |
+| SEC-02 | Hardcoded default database credentials | ✅ Fixed | Task 10 removed the source-code `DATABASE_URL` default, added `.env` loading, and added config tests. |
+| SEC-03 | No rate limiting on auth endpoints | ✅ Fixed | Task 11 added `@nestjs/throttler` limits to login and registration with `429` e2e coverage. |
+| SEC-04 | No HTTP security headers | ✅ Fixed | Task 12 added Helmet security headers with e2e assertions. |
+| SEC-05 | No password complexity rules | ✅ Fixed | Task 13 added server/client registration password complexity validation and tests. |
+| SEC-05 | No CSRF protection beyond `SameSite=Lax` | ✅ Fixed | Task 14 added `csrf-csrf` double-submit protection and client `X-CSRF-Token` handling. |
+
+**Current status:** All security findings from this report have been remediated in Tasks 09-14. Task 15 records this closure status.
+
+---
+
 ## Issues Found
 
 ### 🔴 CRITICAL — No Server-Side Logout

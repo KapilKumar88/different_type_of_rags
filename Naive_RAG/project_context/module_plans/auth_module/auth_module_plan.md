@@ -34,7 +34,8 @@ Module scope is limited to:
 | Task 11: Auth Endpoint Rate Limiting | [task_11.md](task_11.md) | Approved | User approved auth endpoint rate limiting. |
 | Task 12: HTTP Security Headers | [task_12.md](task_12.md) | Approved | User approved Helmet security headers. |
 | Task 13: Password Complexity Rules | [task_13.md](task_13.md) | Approved | User approved password complexity rules. |
-| Task 14: CSRF Protection | [task_14.md](task_14.md) | Review | Added csrf-csrf double-submit protection and client CSRF token handling. |
+| Task 14: CSRF Protection | [task_14.md](task_14.md) | Approved | User approved CSRF double-submit protection. |
+| Task 15: Post-Test Hardening Closure | [task_15.md](task_15.md) | Review | Reconciled the auth E2E test report remediation status. |
 
 ## Key Decisions
 
@@ -45,6 +46,7 @@ Module scope is limited to:
 - Follow the client service/store/validation structure.
 - Do not expand scope beyond login, registration, and auth guard behavior.
 - Post-test logout hardening is tracked as Task 09 because the original sign-out UI did not clear the HttpOnly server cookie.
+- Post-test security hardening from the auth E2E report is tracked in Tasks 09-15.
 
 ## Strict Workflow
 
@@ -71,5 +73,6 @@ Module scope is limited to:
 - Task 11 is approved.
 - Task 12 is approved.
 - Task 13 is approved.
-- Task 14 is in review.
-- Authentication module post-test hardening is in progress.
+- Task 14 is approved.
+- Task 15 is in review.
+- Authentication module post-test hardening is complete pending closure review.

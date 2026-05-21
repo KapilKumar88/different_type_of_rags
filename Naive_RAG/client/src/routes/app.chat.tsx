@@ -11,6 +11,7 @@ import { EditScopeDialog, NewConversationDialog } from "@/components/chat/conver
 import { EmptyState, LoadingConversation, MessageRow } from "@/components/chat/message-display";
 import { usePageMeta } from "@/hooks/use-page-meta";
 import { ApiClientError } from "@/lib/api-client";
+import { clientLogger } from "@/lib/client-logger";
 import { chatService } from "@/services/chat.service";
 import { documentsService } from "@/services/documents.service";
 import type { ChatMessage } from "@/types/chat-ui.types";
@@ -448,6 +449,12 @@ export function ChatPage() {
         if (activeStreamIdRef.current !== streamId) {
           return;
         }
+
+        clientLogger.error("chat.stream_failed", new Error(message), {
+          conversationId,
+          recoverable,
+          retryAttempt,
+        });
 
         const canRetry = Boolean(recoverable) && retryAttempt < 3;
         const tokenBatch = takeBufferedTokens();

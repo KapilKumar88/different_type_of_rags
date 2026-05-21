@@ -1,5 +1,6 @@
 import { apiConfig } from "@/config/api.config";
 import { apiClient } from "@/lib/api-client";
+import { clientLogger } from "@/lib/client-logger";
 import type {
   AskQuestionPayload,
   AskQuestionResponse,
@@ -22,10 +23,18 @@ import type {
 } from "@/types/chat.types";
 
 function parseStreamEvent<TEvent>(event: MessageEvent): TEvent {
-  return JSON.parse(event.data) as TEvent;
+  try {
+    return JSON.parse(event.data) as TEvent;
+  } catch (error) {
+    clientLogger.error("chat.stream_parse_failed", error, {
+      eventType: event.type,
+    });
+    throw error;
+  }
 }
 
 function emitStreamError(handlers: ChatStreamHandlers, message: string, recoverable: boolean) {
+  clientLogger.warn("chat.stream_error", { recoverable });
   handlers.onError?.({ message, recoverable });
 }
 

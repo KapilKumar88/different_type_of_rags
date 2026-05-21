@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 import { AuthGuard } from "@/guard/auth-guard";
 import { GuestGuard } from "@/guard/guest-guard";
-import { NotFoundPage, RootLayout } from "@/routes/__root";
+import { NotFoundPage, RootLayout, RouteErrorPage } from "@/routes/__root";
 import { queryClient } from "@/lib/query-client";
 import "./styles.css";
 
@@ -49,7 +49,7 @@ function withRouteSuspense(element: React.ReactNode) {
 const router = createBrowserRouter([
   {
     element: <RootLayout />,
-    errorElement: <NotFoundPage />,
+    errorElement: <RouteErrorPage />,
     children: [
       { path: "/", element: <Navigate to="/login" replace /> },
       {

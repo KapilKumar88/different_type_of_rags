@@ -1,4 +1,5 @@
 import { apiConfig } from "@/config/api.config";
+import { clientLogger } from "@/lib/client-logger";
 import type { ApiErrorResponse, CsrfResponse } from "@/types/auth.types";
 
 type RequestOptions = Omit<RequestInit, "body" | "credentials"> & {
@@ -115,6 +116,14 @@ function isCsrfError(error: ApiClientError): boolean {
   return error.status === 403 && error.message === "Invalid CSRF token";
 }
 
+function logRequestFailure(path: string, method: string | undefined, error: unknown) {
+  clientLogger.error("api.request_failed", error, {
+    method: method?.toUpperCase() ?? "GET",
+    path,
+    status: error instanceof ApiClientError ? error.status : undefined,
+  });
+}
+
 export const apiClient = {
   async request<TResponse>(
     path: string,
@@ -169,6 +178,7 @@ export const apiClient = {
         return this.request<TResponse>(path, options, false);
       }
 
+      logRequestFailure(path, options.method, error);
       throw error;
     }
   },

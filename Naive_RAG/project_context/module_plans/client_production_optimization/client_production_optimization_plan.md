@@ -69,8 +69,8 @@ Reference URLs:
 | Task 05: Chat Streaming Render Performance | [task_05.md](task_05.md) | Approved | Runtime performance | User approved the streaming render changes and requested Task 06 implementation. |
 | Task 06: Document List and Upload Hardening | [task_06.md](task_06.md) | Approved | Performance/security | User approved document/upload hardening and requested Task 07 implementation. |
 | Task 07: Runtime Config and API Resilience | [task_07.md](task_07.md) | Approved | Security/resilience | User approved runtime config/API resilience and requested Task 08 implementation. |
-| Task 08: Dependency and Static Hosting Security | [task_08.md](task_08.md) | Review | Security | Safe audit fixes applied; Cloudflare-compatible `_headers` added; remaining `ws` advisory deferred because npm only offers a breaking forced fix. |
-| Task 09: Error Boundaries and Client Logging | [task_09.md](task_09.md) | Pending | Reliability | Replace generic route error behavior and add structured client logger hooks. |
+| Task 08: Dependency and Static Hosting Security | [task_08.md](task_08.md) | Approved | Security | User approved dependency/static hosting security and requested Task 09 implementation. |
+| Task 09: Error Boundaries and Client Logging | [task_09.md](task_09.md) | Review | Reliability | Route errors now render a real fallback; API and streaming failures use sanitized structured logging. |
 | Task 10: Final Verification and Reference Update | [task_10.md](task_10.md) | Pending | Verification/docs | Run final checks and update `MASTER_PROJECT_REFERENCE.md`. |
 
 ## Key Technical Decisions
@@ -106,7 +106,8 @@ Reference URLs:
 - Task 05 is approved.
 - Task 06 is approved.
 - Task 07 is approved.
-- Task 08 is ready for review.
+- Task 08 is approved.
+- Task 09 is ready for review.
 - Baseline verification captured:
   - `npm run build` passes with the existing large chunk warning.
   - `npm run lint` passes with `9` warnings.
@@ -188,3 +189,15 @@ Reference URLs:
   - `npm run lint` from `client/` passed with `7` existing Fast Refresh warnings only.
   - `npm run build` from `client/` passed.
   - Static header behavior was verified at build artifact level; deployed Cloudflare response headers were not checked because no deployment target is active here.
+- Task 09 verification:
+  - Added `src/lib/client-logger.ts` with structured `info`, `warn`, and `error` methods.
+  - Logger context is sanitized for sensitive key names including token, secret, password, cookie, authorization, CSRF, content, and chunk.
+  - Route errors now render `RouteErrorPage` instead of `NotFoundPage`.
+  - Production route errors show a generic recovery message instead of raw exception text; development still shows the exception message.
+  - Unknown paths still use the explicit `*` route and render `NotFoundPage`.
+  - Route boundary errors log through `clientLogger.error("route.boundary_error", ...)`.
+  - API client failures log method, path, and status without raw response data or secret-bearing headers.
+  - Chat stream parse and stream failure paths now log through the client logger.
+  - `npm run lint` from `client/` passed with `7` existing Fast Refresh warnings only.
+  - `npm run build` from `client/` passed.
+  - Manual route-error and deployed logging checks were not run because the full browser/runtime stack is not active here.

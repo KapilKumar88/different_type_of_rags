@@ -70,8 +70,8 @@ Reference URLs:
 | Task 06: Document List and Upload Hardening | [task_06.md](task_06.md) | Approved | Performance/security | User approved document/upload hardening and requested Task 07 implementation. |
 | Task 07: Runtime Config and API Resilience | [task_07.md](task_07.md) | Approved | Security/resilience | User approved runtime config/API resilience and requested Task 08 implementation. |
 | Task 08: Dependency and Static Hosting Security | [task_08.md](task_08.md) | Approved | Security | User approved dependency/static hosting security and requested Task 09 implementation. |
-| Task 09: Error Boundaries and Client Logging | [task_09.md](task_09.md) | Review | Reliability | Route errors now render a real fallback; API and streaming failures use sanitized structured logging. |
-| Task 10: Final Verification and Reference Update | [task_10.md](task_10.md) | Pending | Verification/docs | Run final checks and update `MASTER_PROJECT_REFERENCE.md`. |
+| Task 09: Error Boundaries and Client Logging | [task_09.md](task_09.md) | Approved | Reliability | User approved error boundaries/client logging and requested Task 10 implementation. |
+| Task 10: Final Verification and Reference Update | [task_10.md](task_10.md) | Review | Verification/docs | Final verification passed and `MASTER_PROJECT_REFERENCE.md` is updated. |
 
 ## Key Technical Decisions
 
@@ -107,7 +107,8 @@ Reference URLs:
 - Task 06 is approved.
 - Task 07 is approved.
 - Task 08 is approved.
-- Task 09 is ready for review.
+- Task 09 is approved.
+- Task 10 is ready for review.
 - Baseline verification captured:
   - `npm run build` passes with the existing large chunk warning.
   - `npm run lint` passes with `9` warnings.
@@ -201,3 +202,31 @@ Reference URLs:
   - `npm run lint` from `client/` passed with `7` existing Fast Refresh warnings only.
   - `npm run build` from `client/` passed.
   - Manual route-error and deployed logging checks were not run because the full browser/runtime stack is not active here.
+- Task 10 verification:
+  - `npm run lint` from `client/` passed with `7` existing Fast Refresh warnings only.
+  - `npm run build` from `client/` passed with no Vite large-chunk warning.
+  - `npm audit --audit-level=high` from `client/` passed with no high/critical advisories.
+  - Remaining audit output is the deferred moderate `ws` chain through Cloudflare/miniflare/wrangler; npm still only offers a breaking forced fix.
+  - Final bundle snapshot:
+    - Entry app chunk: `47.90 kB` minified / `14.75 kB` gzip.
+    - `vendor-react`: `283.60 kB` minified / `90.94 kB` gzip.
+    - `vendor-query-state`: `36.25 kB` minified / `10.77 kB` gzip.
+    - Lazy `vendor-markdown`: `156.79 kB` minified / `47.47 kB` gzip.
+    - Lazy `vendor-charts`: `392.93 kB` minified / `108.04 kB` gzip.
+    - `app.chat` route chunk: `37.21 kB` minified / `11.47 kB` gzip.
+    - `app.usage` route chunk: `7.77 kB` minified / `2.60 kB` gzip.
+  - Baseline before this module was one JS bundle at `1,240.45 kB` minified / `364.41 kB` gzip with a Vite large-chunk warning.
+  - Updated `project_context/MASTER_PROJECT_REFERENCE.md` with current client code splitting, runtime config, API resilience, security headers, audit state, lint warnings, bundle results, and production caveats.
+  - Optional full-stack manual smoke test was not run because the full backend/runtime stack is not active here.
+
+## Final Module Summary
+
+- The client now uses route-level lazy loading and named Vite vendor chunks.
+- Chat route maintainability improved by extracting presentational chat components and UI helpers.
+- Chat streaming render pressure is reduced with animation-frame token buffering.
+- Document filtering/count derivations and upload validation are hardened.
+- Production API config now fails explicitly when missing and API paths encode dynamic IDs.
+- API requests now support timeout/abort behavior and sanitized structured logging.
+- Cloudflare static security headers are configured through `public/_headers`.
+- Route errors now render a recovery fallback instead of masquerading as 404.
+- The remaining production follow-ups are deployed header verification, full-stack smoke testing, and monitoring the deferred Cloudflare `ws` advisory for a non-breaking upstream fix.

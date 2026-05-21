@@ -68,8 +68,8 @@ Reference URLs:
 | Task 04: Chat Module Decomposition | [task_04.md](task_04.md) | Approved | Maintainability/code splitting | User approved the chat extraction and requested Task 05 implementation. |
 | Task 05: Chat Streaming Render Performance | [task_05.md](task_05.md) | Approved | Runtime performance | User approved the streaming render changes and requested Task 06 implementation. |
 | Task 06: Document List and Upload Hardening | [task_06.md](task_06.md) | Approved | Performance/security | User approved document/upload hardening and requested Task 07 implementation. |
-| Task 07: Runtime Config and API Resilience | [task_07.md](task_07.md) | Review | Security/resilience | Production config now fails explicitly when missing, IDs are encoded, API requests have timeout/abort handling. |
-| Task 08: Dependency and Static Hosting Security | [task_08.md](task_08.md) | Pending | Security | Address moderate advisories where safe and add static asset security headers. |
+| Task 07: Runtime Config and API Resilience | [task_07.md](task_07.md) | Approved | Security/resilience | User approved runtime config/API resilience and requested Task 08 implementation. |
+| Task 08: Dependency and Static Hosting Security | [task_08.md](task_08.md) | Review | Security | Safe audit fixes applied; Cloudflare-compatible `_headers` added; remaining `ws` advisory deferred because npm only offers a breaking forced fix. |
 | Task 09: Error Boundaries and Client Logging | [task_09.md](task_09.md) | Pending | Reliability | Replace generic route error behavior and add structured client logger hooks. |
 | Task 10: Final Verification and Reference Update | [task_10.md](task_10.md) | Pending | Verification/docs | Run final checks and update `MASTER_PROJECT_REFERENCE.md`. |
 
@@ -105,7 +105,8 @@ Reference URLs:
 - Task 04 is approved.
 - Task 05 is approved.
 - Task 06 is approved.
-- Task 07 is ready for review.
+- Task 07 is approved.
+- Task 08 is ready for review.
 - Baseline verification captured:
   - `npm run build` passes with the existing large chunk warning.
   - `npm run lint` passes with `9` warnings.
@@ -174,3 +175,16 @@ Reference URLs:
   - `npm run build` from `client/` passed.
   - `VITE_API_BASE_URL=http://localhost:3000 npm run build` from `client/` passed.
   - Manual API checks were not run because the full backend/runtime stack is not active here.
+- Task 08 verification:
+  - Ran `npm audit fix` without `--force`.
+  - Updated the direct `@cloudflare/vite-plugin` manifest range to `^1.37.2`, matching the safe lockfile refresh.
+  - `brace-expansion` is resolved to `5.0.6` for the TypeScript ESLint nested dependency.
+  - `postcss` is resolved to `8.5.15`.
+  - Remaining audit output is `4` moderate advisories through `ws` in the Cloudflare/miniflare/wrangler toolchain.
+  - The remaining `ws` advisory is deferred because npm only offers `npm audit fix --force`, which would install `@cloudflare/vite-plugin@0.1.1` and break the current Cloudflare Vite setup.
+  - Added Cloudflare-compatible `public/_headers` for CSP, `nosniff`, referrer policy, frame protection, permissions policy, COOP, and immutable caching for hashed assets.
+  - Confirmed Vite copies `_headers` into `dist/_headers`.
+  - `npm audit --audit-level=high` from `client/` passed with only the deferred moderate `ws` chain reported.
+  - `npm run lint` from `client/` passed with `7` existing Fast Refresh warnings only.
+  - `npm run build` from `client/` passed.
+  - Static header behavior was verified at build artifact level; deployed Cloudflare response headers were not checked because no deployment target is active here.

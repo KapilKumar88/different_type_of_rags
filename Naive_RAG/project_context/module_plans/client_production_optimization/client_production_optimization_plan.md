@@ -67,8 +67,8 @@ Reference URLs:
 | Task 03: Vite Chunk Strategy and Bundle Audit | [task_03.md](task_03.md) | Approved | Bundle size | User approved moving forward after discussing the manual chunking tradeoff. |
 | Task 04: Chat Module Decomposition | [task_04.md](task_04.md) | Approved | Maintainability/code splitting | User approved the chat extraction and requested Task 05 implementation. |
 | Task 05: Chat Streaming Render Performance | [task_05.md](task_05.md) | Approved | Runtime performance | User approved the streaming render changes and requested Task 06 implementation. |
-| Task 06: Document List and Upload Hardening | [task_06.md](task_06.md) | Review | Performance/security | Memoized document derivations and added client-side upload type/size validation. |
-| Task 07: Runtime Config and API Resilience | [task_07.md](task_07.md) | Pending | Security/resilience | Validate production env, encode IDs, add timeout/abort handling. |
+| Task 06: Document List and Upload Hardening | [task_06.md](task_06.md) | Approved | Performance/security | User approved document/upload hardening and requested Task 07 implementation. |
+| Task 07: Runtime Config and API Resilience | [task_07.md](task_07.md) | Review | Security/resilience | Production config now fails explicitly when missing, IDs are encoded, API requests have timeout/abort handling. |
 | Task 08: Dependency and Static Hosting Security | [task_08.md](task_08.md) | Pending | Security | Address moderate advisories where safe and add static asset security headers. |
 | Task 09: Error Boundaries and Client Logging | [task_09.md](task_09.md) | Pending | Reliability | Replace generic route error behavior and add structured client logger hooks. |
 | Task 10: Final Verification and Reference Update | [task_10.md](task_10.md) | Pending | Verification/docs | Run final checks and update `MASTER_PROJECT_REFERENCE.md`. |
@@ -104,7 +104,8 @@ Reference URLs:
 - Task 03 is approved.
 - Task 04 is approved.
 - Task 05 is approved.
-- Task 06 is in Review.
+- Task 06 is approved.
+- Task 07 is ready for review.
 - Baseline verification captured:
   - `npm run build` passes with the existing large chunk warning.
   - `npm run lint` passes with `9` warnings.
@@ -160,3 +161,16 @@ Reference URLs:
   - `npm run lint` from `client/` passed with `7` existing Fast Refresh warnings only.
   - `npm run build` from `client/` passed.
   - Manual file upload checks were not run because the full backend/runtime stack is not active here.
+- Task 07 verification:
+  - Production runtime config no longer silently falls back to `http://localhost:3000` when `VITE_API_BASE_URL` is missing.
+  - Missing production API config now produces an explicit runtime failure path: `VITE_API_BASE_URL is required for production client builds.`
+  - A configured production build with `VITE_API_BASE_URL=http://localhost:3000` passed and emitted that configured base URL in the bundle.
+  - Dynamic endpoint path segments now use `encodeURIComponent` for document IDs, conversation IDs, and message IDs.
+  - API fetches now use a default `30s` timeout and bridge caller abort signals through the internal `AbortController`.
+  - Timeout, caller cancellation, and browser/network failures are normalized to `ApiClientError` instances.
+  - CSRF token fetches and stale-CSRF retry behavior still use the same service contracts.
+  - Clipboard copy failures now surface a user-facing toast instead of failing silently.
+  - `npm run lint` from `client/` passed with `7` existing Fast Refresh warnings only.
+  - `npm run build` from `client/` passed.
+  - `VITE_API_BASE_URL=http://localhost:3000 npm run build` from `client/` passed.
+  - Manual API checks were not run because the full backend/runtime stack is not active here.

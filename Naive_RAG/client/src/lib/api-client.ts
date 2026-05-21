@@ -3,6 +3,7 @@ import type { ApiErrorResponse, CsrfResponse } from "@/types/auth.types";
 
 type RequestOptions = Omit<RequestInit, "body" | "credentials"> & {
   body?: unknown;
+  timeoutMs?: number;
 };
 
 export class ApiClientError extends Error {
@@ -18,6 +19,47 @@ export class ApiClientError extends Error {
 }
 
 let csrfToken: string | null = null;
+const defaultRequestTimeoutMs = 30_000;
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = defaultRequestTimeoutMs,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  const abortFromCaller = () => controller.abort();
+  init.signal?.addEventListener("abort", abortFromCaller, { once: true });
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiClientError(
+        timedOut ? "Request timed out" : "Request cancelled",
+        timedOut ? 408 : 0,
+        null,
+      );
+    }
+
+    if (error instanceof TypeError) {
+      throw new ApiClientError("Network request failed", 0, null);
+    }
+
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+    init.signal?.removeEventListener("abort", abortFromCaller);
+  }
+}
 
 async function parseResponse(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type");
@@ -48,7 +90,7 @@ async function getCsrfToken(): Promise<string> {
     return csrfToken;
   }
 
-  const response = await fetch(`${apiConfig.baseUrl}${apiConfig.endpoints.csrf}`, {
+  const response = await fetchWithTimeout(`${apiConfig.baseUrl}${apiConfig.endpoints.csrf}`, {
     credentials: "include",
   });
   const parsedResponse = (await parseResponse(response)) as Partial<CsrfResponse>;
@@ -94,12 +136,17 @@ export const apiClient = {
 
       await addCsrfHeader(path, options, headers);
 
-      const response = await fetch(`${apiConfig.baseUrl}${path}`, {
-        ...options,
-        headers,
-        credentials: "include",
-        body,
-      });
+      const { timeoutMs, ...fetchOptions } = options;
+      const response = await fetchWithTimeout(
+        `${apiConfig.baseUrl}${path}`,
+        {
+          ...fetchOptions,
+          headers,
+          credentials: "include",
+          body,
+        },
+        timeoutMs,
+      );
       const parsedResponse = await parseResponse(response);
 
       if (!response.ok) {

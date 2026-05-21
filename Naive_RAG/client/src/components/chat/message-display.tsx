@@ -72,9 +72,15 @@ export function MessageRow({
               size="sm"
               variant="ghost"
               className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-              onClick={() => {
-                navigator.clipboard.writeText(message.content);
-                toast.success("Copied to clipboard");
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(message.content);
+                  toast.success("Copied to clipboard");
+                } catch {
+                  toast.error("Copy failed", {
+                    description: "Your browser did not allow clipboard access.",
+                  });
+                }
               }}
             >
               <Copy className="h-3 w-3" /> Copy

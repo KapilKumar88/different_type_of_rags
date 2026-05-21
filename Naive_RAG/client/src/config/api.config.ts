@@ -1,5 +1,9 @@
 import { envConfig } from "./env.config";
 
+function pathSegment(value: string): string {
+  return encodeURIComponent(value);
+}
+
 export const apiConfig = {
   baseUrl: envConfig.apiBaseUrl,
   endpoints: {
@@ -13,18 +17,22 @@ export const apiConfig = {
     documents: {
       upload: "/api/v1/documents/upload",
       list: "/api/v1/documents",
-      delete: (id: string) => `/api/v1/documents/${id}`,
+      delete: (id: string) => `/api/v1/documents/${pathSegment(id)}`,
     },
     chat: {
       ask: "/api/v1/chat/ask",
       conversations: "/api/v1/chat/conversations",
-      conversation: (id: string) => `/api/v1/chat/conversations/${id}`,
-      updateConversation: (id: string) => `/api/v1/chat/conversations/${id}`,
-      updateConversationDocuments: (id: string) => `/api/v1/chat/conversations/${id}/documents`,
-      deleteConversation: (id: string) => `/api/v1/chat/conversations/${id}`,
-      messages: (conversationId: string) => `/api/v1/chat/conversations/${conversationId}/messages`,
+      conversation: (id: string) => `/api/v1/chat/conversations/${pathSegment(id)}`,
+      updateConversation: (id: string) => `/api/v1/chat/conversations/${pathSegment(id)}`,
+      updateConversationDocuments: (id: string) =>
+        `/api/v1/chat/conversations/${pathSegment(id)}/documents`,
+      deleteConversation: (id: string) => `/api/v1/chat/conversations/${pathSegment(id)}`,
+      messages: (conversationId: string) =>
+        `/api/v1/chat/conversations/${pathSegment(conversationId)}/messages`,
       messageStream: (conversationId: string, messageId: string) =>
-        `/api/v1/chat/conversations/${conversationId}/messages/${messageId}/stream`,
+        `/api/v1/chat/conversations/${pathSegment(conversationId)}/messages/${pathSegment(
+          messageId,
+        )}/stream`,
     },
   },
 } as const;

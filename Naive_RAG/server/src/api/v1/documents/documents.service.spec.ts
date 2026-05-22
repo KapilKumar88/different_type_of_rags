@@ -3,7 +3,10 @@ import type { Document } from '../../../database/schemas';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import { DocumentsRepository } from './documents.repository';
-import { DocumentsService, type UploadedDocumentFile } from './documents.service';
+import {
+  DocumentsService,
+  type UploadedDocumentFile,
+} from './documents.service';
 
 const createdAt = new Date('2026-01-01T00:00:00.000Z');
 const updatedAt = new Date('2026-01-01T00:00:00.000Z');
@@ -11,6 +14,7 @@ const updatedAt = new Date('2026-01-01T00:00:00.000Z');
 function createDocument(overrides: Partial<Document> = {}): Document {
   return {
     id: 'd79d5e51-4b9e-4db8-9440-961f98d4f61a',
+    userId: 'user-1',
     fileName: 'rag-notes.txt',
     mimeType: 'text/plain',
     sizeBytes: 42,
@@ -21,7 +25,9 @@ function createDocument(overrides: Partial<Document> = {}): Document {
   };
 }
 
-function createFile(overrides: Partial<UploadedDocumentFile> = {}): UploadedDocumentFile {
+function createFile(
+  overrides: Partial<UploadedDocumentFile> = {},
+): UploadedDocumentFile {
   return {
     originalname: 'rag-notes.txt',
     mimetype: 'text/plain',
@@ -40,9 +46,10 @@ describe('DocumentsService', () => {
   beforeEach(() => {
     documentsRepository = {
       create: jest.fn(),
-      findAll: jest.fn(),
-      findById: jest.fn(),
-      deleteById: jest.fn(),
+      findAllByUser: jest.fn(),
+      findByIdForUser: jest.fn(),
+      findByIdsForUser: jest.fn(),
+      deleteByIdForUser: jest.fn(),
     } as unknown as jest.Mocked<DocumentsRepository>;
     embeddingsService = {
       embedDocuments: jest.fn(),
@@ -63,7 +70,7 @@ describe('DocumentsService', () => {
     embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
     documentsRepository.create.mockResolvedValue(document);
 
-    const result = await documentsService.upload(createFile());
+    const result = await documentsService.upload('user-1', createFile());
 
     expect(embeddingsService.embedDocuments).toHaveBeenCalledWith([
       'Naive RAG retrieves chunks from Qdrant.',
@@ -83,47 +90,72 @@ describe('DocumentsService', () => {
         mimeType: 'text/plain',
         sizeBytes: 42,
         chunkCount: 1,
+        userId: 'user-1',
       }),
     );
     expect(result).toBe(document);
   });
 
   it('rejects missing files', async () => {
-    await expect(documentsService.upload(undefined)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      documentsService.upload('user-1', undefined),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects documents with no readable text', async () => {
     await expect(
-      documentsService.upload(createFile({ buffer: Buffer.from('   ') })),
+      documentsService.upload(
+        'user-1',
+        createFile({ buffer: Buffer.from('   ') }),
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('lists documents from the repository', async () => {
+  it('lists only documents owned by the user', async () => {
     const documents = [createDocument()];
-    documentsRepository.findAll.mockResolvedValue(documents);
+    documentsRepository.findAllByUser.mockResolvedValue(documents);
 
-    await expect(documentsService.list()).resolves.toBe(documents);
+    await expect(documentsService.list('user-1')).resolves.toBe(documents);
+    expect(documentsRepository.findAllByUser).toHaveBeenCalledWith('user-1');
+  });
+
+  it('finds selected documents only within the user scope', async () => {
+    const documents = [createDocument()];
+    documentsRepository.findByIdsForUser.mockResolvedValue(documents);
+
+    await expect(
+      documentsService.findByIds('user-1', [documents[0].id]),
+    ).resolves.toBe(documents);
+    expect(documentsRepository.findByIdsForUser).toHaveBeenCalledWith(
+      'user-1',
+      [documents[0].id],
+    );
   });
 
   it('deletes vectors and metadata for an existing document', async () => {
     const document = createDocument();
-    documentsRepository.findById.mockResolvedValue(document);
-    documentsRepository.deleteById.mockResolvedValue(document);
+    documentsRepository.findByIdForUser.mockResolvedValue(document);
+    documentsRepository.deleteByIdForUser.mockResolvedValue(document);
 
-    const result = await documentsService.delete(document.id);
+    const result = await documentsService.delete('user-1', document.id);
 
+    expect(documentsRepository.findByIdForUser).toHaveBeenCalledWith(
+      'user-1',
+      document.id,
+    );
     expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(document.id);
-    expect(documentsRepository.deleteById).toHaveBeenCalledWith(document.id);
+    expect(documentsRepository.deleteByIdForUser).toHaveBeenCalledWith(
+      'user-1',
+      document.id,
+    );
     expect(result).toBe(document);
   });
 
-  it('rejects deletion when the document does not exist', async () => {
-    documentsRepository.findById.mockResolvedValue(null);
+  it('rejects deletion when the document does not exist for the user', async () => {
+    documentsRepository.findByIdForUser.mockResolvedValue(null);
 
     await expect(
-      documentsService.delete('d79d5e51-4b9e-4db8-9440-961f98d4f61a'),
+      documentsService.delete('user-1', 'd79d5e51-4b9e-4db8-9440-961f98d4f61a'),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(qdrantService.deleteByDocumentId).not.toHaveBeenCalled();
   });

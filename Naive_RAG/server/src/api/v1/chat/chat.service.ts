@@ -77,7 +77,10 @@ export class ChatService {
     userId: string,
     dto: CreateConversationDto,
   ): Promise<ConversationSummary> {
-    const documentIds = await this.validateSelectedDocuments(dto.documentIds);
+    const documentIds = await this.validateSelectedDocuments(
+      userId,
+      dto.documentIds,
+    );
 
     return this.chatRepository.createConversation(
       {
@@ -131,7 +134,10 @@ export class ChatService {
   ): Promise<ConversationSummary> {
     await this.getOwnedConversation(userId, conversationId);
 
-    const documentIds = await this.validateSelectedDocuments(dto.documentIds);
+    const documentIds = await this.validateSelectedDocuments(
+      userId,
+      dto.documentIds,
+    );
     const conversation = await this.chatRepository.replaceConversationDocuments(
       conversationId,
       documentIds,
@@ -375,6 +381,7 @@ export class ChatService {
   }
 
   private async validateSelectedDocuments(
+    userId: string,
     documentIds: string[],
   ): Promise<string[]> {
     const uniqueDocumentIds = [...new Set(documentIds)];
@@ -383,7 +390,10 @@ export class ChatService {
       throw new BadRequestException('Select at least one document');
     }
 
-    const documents = await this.documentsService.findByIds(uniqueDocumentIds);
+    const documents = await this.documentsService.findByIds(
+      userId,
+      uniqueDocumentIds,
+    );
 
     if (documents.length !== uniqueDocumentIds.length) {
       throw new BadRequestException(

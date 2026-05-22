@@ -30,7 +30,10 @@ export class DocumentsService {
     private readonly qdrantService: QdrantService,
   ) {}
 
-  async upload(file: UploadedDocumentFile | undefined): Promise<Document> {
+  async upload(
+    userId: string,
+    file: UploadedDocumentFile | undefined,
+  ): Promise<Document> {
     if (!file) {
       throw new BadRequestException('Document file is required');
     }
@@ -98,6 +101,7 @@ export class DocumentsService {
     // 5. Persist document-level metadata for listing and deletion.
     return this.documentsRepository.create({
       id: documentId,
+      userId,
       fileName: file.originalname,
       mimeType: file.mimetype || 'application/octet-stream',
       sizeBytes: file.size,
@@ -105,23 +109,26 @@ export class DocumentsService {
     });
   }
 
-  list(): Promise<Document[]> {
-    return this.documentsRepository.findAll();
+  list(userId: string): Promise<Document[]> {
+    return this.documentsRepository.findAllByUser(userId);
   }
 
-  findByIds(ids: string[]): Promise<Document[]> {
-    return this.documentsRepository.findByIds(ids);
+  findByIds(userId: string, ids: string[]): Promise<Document[]> {
+    return this.documentsRepository.findByIdsForUser(userId, ids);
   }
 
-  async delete(id: string): Promise<Document> {
-    const document = await this.documentsRepository.findById(id);
+  async delete(userId: string, id: string): Promise<Document> {
+    const document = await this.documentsRepository.findByIdForUser(userId, id);
 
     if (!document) {
       throw new NotFoundException('Document not found');
     }
 
     await this.qdrantService.deleteByDocumentId(id);
-    const deletedDocument = await this.documentsRepository.deleteById(id);
+    const deletedDocument = await this.documentsRepository.deleteByIdForUser(
+      userId,
+      id,
+    );
 
     if (!deletedDocument) {
       throw new NotFoundException('Document not found');

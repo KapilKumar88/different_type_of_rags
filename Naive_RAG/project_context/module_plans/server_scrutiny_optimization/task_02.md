@@ -33,3 +33,15 @@ Prevent authenticated users from listing, selecting, querying, or deleting docum
 ## Review Gate
 
 Stop after this task and wait for user review before starting Task 03.
+
+## Completion Notes
+
+- Added `documents.userId` to the Drizzle schema with a `users.id` foreign key and a user-id index.
+- Added migration `0003_happy_vertigo.sql`. Because existing document rows have no reliable owner to backfill, the migration deliberately clears old RAG conversations/documents before adding non-null ownership.
+- Updated document controller methods to pass `CurrentUser`.
+- Scoped document repository/service methods by `userId`.
+- Updated chat document selection validation to call `documentsService.findByIds(userId, ids)`.
+- Added/updated tests for user-scoped list/find/delete behavior and rejection of documents outside the user's scope.
+- Verification passed:
+  - `npm run build`
+  - `npm test -- chat.service.spec.ts documents.service.spec.ts --runInBand`

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import {
   documents,
   type Document,
@@ -20,24 +20,25 @@ export class DocumentsRepository {
     return document;
   }
 
-  async findAll(): Promise<Document[]> {
+  async findAllByUser(userId: string): Promise<Document[]> {
     return this.databaseService.instance
       .select()
       .from(documents)
+      .where(eq(documents.userId, userId))
       .orderBy(desc(documents.createdAt));
   }
 
-  async findById(id: string): Promise<Document | null> {
+  async findByIdForUser(userId: string, id: string): Promise<Document | null> {
     const [document] = await this.databaseService.instance
       .select()
       .from(documents)
-      .where(eq(documents.id, id))
+      .where(and(eq(documents.id, id), eq(documents.userId, userId)))
       .limit(1);
 
     return document ?? null;
   }
 
-  async findByIds(ids: string[]): Promise<Document[]> {
+  async findByIdsForUser(userId: string, ids: string[]): Promise<Document[]> {
     if (ids.length === 0) {
       return [];
     }
@@ -45,13 +46,16 @@ export class DocumentsRepository {
     return this.databaseService.instance
       .select()
       .from(documents)
-      .where(inArray(documents.id, ids));
+      .where(and(eq(documents.userId, userId), inArray(documents.id, ids)));
   }
 
-  async deleteById(id: string): Promise<Document | null> {
+  async deleteByIdForUser(
+    userId: string,
+    id: string,
+  ): Promise<Document | null> {
     const [document] = await this.databaseService.instance
       .delete(documents)
-      .where(eq(documents.id, id))
+      .where(and(eq(documents.id, id), eq(documents.userId, userId)))
       .returning();
 
     return document ?? null;

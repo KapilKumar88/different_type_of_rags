@@ -12,6 +12,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
+import { CurrentUser } from '../../../guard/decorators/current-user.decorator';
+import type { SafeUser } from '../../../types/auth.types';
 import { documentIdSchema, type DocumentIdDto } from './dto/document-id.dto';
 import {
   DocumentsService,
@@ -28,8 +30,11 @@ export class DocumentsController {
       storage: memoryStorage(),
     }),
   )
-  async upload(@UploadedFile() file: UploadedDocumentFile | undefined) {
-    const document = await this.documentsService.upload(file);
+  async upload(
+    @CurrentUser() user: SafeUser,
+    @UploadedFile() file: UploadedDocumentFile | undefined,
+  ) {
+    const document = await this.documentsService.upload(user.id, file);
 
     return {
       success: true,
@@ -39,8 +44,8 @@ export class DocumentsController {
   }
 
   @Get()
-  async list() {
-    const documents = await this.documentsService.list();
+  async list(@CurrentUser() user: SafeUser) {
+    const documents = await this.documentsService.list(user.id);
 
     return {
       success: true,
@@ -52,9 +57,10 @@ export class DocumentsController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   async delete(
+    @CurrentUser() user: SafeUser,
     @Param(new ZodValidationPipe(documentIdSchema)) params: DocumentIdDto,
   ) {
-    const document = await this.documentsService.delete(params.id);
+    const document = await this.documentsService.delete(user.id, params.id);
 
     return {
       success: true,

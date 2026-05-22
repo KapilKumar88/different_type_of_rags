@@ -1,6 +1,6 @@
 import { ragConfig } from '../../../config/rag.config';
 import type { MessageEvent } from '@nestjs/common';
-import type { ConversationMessage } from '../../../database/schemas';
+import type { ConversationMessage, Document } from '../../../database/schemas';
 import type { RetrievedChunk } from '../../../types/rag.types';
 import { DocumentsService } from '../documents/documents.service';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
@@ -19,6 +19,20 @@ function createChunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
     text: 'Naive RAG retrieves the most similar chunks before calling the LLM.',
     createdAt: '2026-01-01T00:00:00.000Z',
     score: 0.91,
+    ...overrides,
+  };
+}
+
+function createDocumentRecord(overrides: Partial<Document> = {}): Document {
+  return {
+    id: 'document-1',
+    userId: 'user-1',
+    fileName: 'one.txt',
+    mimeType: 'text/plain',
+    sizeBytes: 10,
+    chunkCount: 1,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     ...overrides,
   };
 }
@@ -155,24 +169,8 @@ describe('ChatService', () => {
       documentIds: ['document-1', 'document-2'],
     };
     documentsService.findByIds.mockResolvedValue([
-      {
-        id: 'document-1',
-        fileName: 'one.txt',
-        mimeType: 'text/plain',
-        sizeBytes: 10,
-        chunkCount: 1,
-        createdAt,
-        updatedAt,
-      },
-      {
-        id: 'document-2',
-        fileName: 'two.txt',
-        mimeType: 'text/plain',
-        sizeBytes: 10,
-        chunkCount: 1,
-        createdAt,
-        updatedAt,
-      },
+      createDocumentRecord(),
+      createDocumentRecord({ id: 'document-2', fileName: 'two.txt' }),
     ]);
     chatRepository.createConversation.mockResolvedValue(conversation);
 
@@ -201,24 +199,8 @@ describe('ChatService', () => {
       documentIds: ['document-1', 'document-2'],
     };
     documentsService.findByIds.mockResolvedValue([
-      {
-        id: 'document-1',
-        fileName: 'one.txt',
-        mimeType: 'text/plain',
-        sizeBytes: 10,
-        chunkCount: 1,
-        createdAt,
-        updatedAt,
-      },
-      {
-        id: 'document-2',
-        fileName: 'two.txt',
-        mimeType: 'text/plain',
-        sizeBytes: 10,
-        chunkCount: 1,
-        createdAt,
-        updatedAt,
-      },
+      createDocumentRecord(),
+      createDocumentRecord({ id: 'document-2', fileName: 'two.txt' }),
     ]);
     chatRepository.createConversation.mockResolvedValue(conversation);
 
@@ -227,7 +209,7 @@ describe('ChatService', () => {
       documentIds: ['document-1', 'document-2', 'document-1'],
     });
 
-    expect(documentsService.findByIds).toHaveBeenCalledWith([
+    expect(documentsService.findByIds).toHaveBeenCalledWith('user-1', [
       'document-1',
       'document-2',
     ]);
@@ -241,17 +223,7 @@ describe('ChatService', () => {
   });
 
   it('rejects missing selected documents before creating a conversation', async () => {
-    documentsService.findByIds.mockResolvedValue([
-      {
-        id: 'document-1',
-        fileName: 'one.txt',
-        mimeType: 'text/plain',
-        sizeBytes: 10,
-        chunkCount: 1,
-        createdAt,
-        updatedAt,
-      },
-    ]);
+    documentsService.findByIds.mockResolvedValue([createDocumentRecord()]);
 
     await expect(
       chatService.createConversation('user-1', {
@@ -259,6 +231,21 @@ describe('ChatService', () => {
         documentIds: ['document-1', 'document-2'],
       }),
     ).rejects.toThrow('One or more selected documents were not found');
+    expect(chatRepository.createConversation).not.toHaveBeenCalled();
+  });
+
+  it('rejects documents that are not owned by the user before creating a conversation', async () => {
+    documentsService.findByIds.mockResolvedValue([]);
+
+    await expect(
+      chatService.createConversation('user-1', {
+        title: 'Project docs',
+        documentIds: ['document-owned-by-user-2'],
+      }),
+    ).rejects.toThrow('One or more selected documents were not found');
+    expect(documentsService.findByIds).toHaveBeenCalledWith('user-1', [
+      'document-owned-by-user-2',
+    ]);
     expect(chatRepository.createConversation).not.toHaveBeenCalled();
   });
 
@@ -271,17 +258,7 @@ describe('ChatService', () => {
       updatedAt,
       documentIds: ['document-1'],
     };
-    documentsService.findByIds.mockResolvedValue([
-      {
-        id: 'document-1',
-        fileName: 'one.txt',
-        mimeType: 'text/plain',
-        sizeBytes: 10,
-        chunkCount: 1,
-        createdAt,
-        updatedAt,
-      },
-    ]);
+    documentsService.findByIds.mockResolvedValue([createDocumentRecord()]);
     chatRepository.createConversation.mockResolvedValue(conversation);
 
     await chatService.createConversation('user-1', {
@@ -410,7 +387,9 @@ describe('ChatService', () => {
     expect(() =>
       updateConversationSchema.parse({ title: 'x'.repeat(181) }),
     ).toThrow();
-    expect(updateConversationSchema.parse({ title: ' Research notes ' })).toEqual({
+    expect(
+      updateConversationSchema.parse({ title: ' Research notes ' }),
+    ).toEqual({
       title: 'Research notes',
     });
   });
@@ -431,24 +410,8 @@ describe('ChatService', () => {
     };
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
     documentsService.findByIds.mockResolvedValue([
-      {
-        id: 'document-1',
-        fileName: 'one.txt',
-        mimeType: 'text/plain',
-        sizeBytes: 10,
-        chunkCount: 1,
-        createdAt,
-        updatedAt,
-      },
-      {
-        id: 'document-2',
-        fileName: 'two.txt',
-        mimeType: 'text/plain',
-        sizeBytes: 10,
-        chunkCount: 1,
-        createdAt,
-        updatedAt,
-      },
+      createDocumentRecord(),
+      createDocumentRecord({ id: 'document-2', fileName: 'two.txt' }),
     ]);
     chatRepository.replaceConversationDocuments.mockResolvedValue(
       updatedConversation,
@@ -466,7 +429,7 @@ describe('ChatService', () => {
       'conversation-1',
       'user-1',
     );
-    expect(documentsService.findByIds).toHaveBeenCalledWith([
+    expect(documentsService.findByIds).toHaveBeenCalledWith('user-1', [
       'document-1',
       'document-2',
     ]);
@@ -499,23 +462,36 @@ describe('ChatService', () => {
       documentIds: ['document-1'],
     };
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
-    documentsService.findByIds.mockResolvedValue([
-      {
-        id: 'document-1',
-        fileName: 'one.txt',
-        mimeType: 'text/plain',
-        sizeBytes: 10,
-        chunkCount: 1,
-        createdAt,
-        updatedAt,
-      },
-    ]);
+    documentsService.findByIds.mockResolvedValue([createDocumentRecord()]);
 
     await expect(
       chatService.updateConversationDocuments('user-1', 'conversation-1', {
         documentIds: ['document-1', 'document-2'],
       }),
     ).rejects.toThrow('One or more selected documents were not found');
+    expect(chatRepository.replaceConversationDocuments).not.toHaveBeenCalled();
+  });
+
+  it('rejects documents that are not owned by the user before updating conversation documents', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    documentsService.findByIds.mockResolvedValue([]);
+
+    await expect(
+      chatService.updateConversationDocuments('user-1', 'conversation-1', {
+        documentIds: ['document-owned-by-user-2'],
+      }),
+    ).rejects.toThrow('One or more selected documents were not found');
+    expect(documentsService.findByIds).toHaveBeenCalledWith('user-1', [
+      'document-owned-by-user-2',
+    ]);
     expect(chatRepository.replaceConversationDocuments).not.toHaveBeenCalled();
   });
 

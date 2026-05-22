@@ -70,7 +70,6 @@ describe('ChatService', () => {
       embedQuery: jest.fn(),
     } as unknown as jest.Mocked<EmbeddingsService>;
     qdrantService = {
-      search: jest.fn(),
       searchByDocumentIds: jest.fn(),
     } as unknown as jest.Mocked<QdrantService>;
     llmService = {
@@ -98,65 +97,6 @@ describe('ChatService', () => {
       chatRepository,
       documentsService,
     );
-  });
-
-  it('embeds the question, retrieves top chunks, prompts the LLM, and returns sources', async () => {
-    const questionVector = Array(768).fill(0.2);
-    const source = createChunk({ pageNumber: 2 });
-    embeddingsService.embedQuery.mockResolvedValue(questionVector);
-    qdrantService.search.mockResolvedValue([source]);
-    llmService.generateAnswer.mockResolvedValue(
-      'Naive RAG retrieves similar chunks before answering.',
-    );
-
-    const result = await chatService.ask({
-      question: 'How does Naive RAG answer?',
-    });
-
-    expect(embeddingsService.embedQuery).toHaveBeenCalledWith(
-      'How does Naive RAG answer?',
-    );
-    expect(qdrantService.search).toHaveBeenCalledWith(
-      questionVector,
-      ragConfig.topK,
-    );
-    expect(llmService.generateAnswer).toHaveBeenCalledWith(
-      expect.stringContaining('Context:\nSource 1 (rag-notes.txt page 2):'),
-    );
-    expect(llmService.generateAnswer).toHaveBeenCalledWith(
-      expect.stringContaining('Question:\nHow does Naive RAG answer?'),
-    );
-    expect(result).toEqual({
-      answer: 'Naive RAG retrieves similar chunks before answering.',
-      sources: [source],
-    });
-  });
-
-  it('returns the fallback answer without calling the LLM when no chunks are found', async () => {
-    embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.2));
-    qdrantService.search.mockResolvedValue([]);
-
-    const result = await chatService.ask({
-      question: 'What is not in the document?',
-    });
-
-    expect(llmService.generateAnswer).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      answer: ragConfig.fallbackAnswer,
-      sources: [],
-    });
-  });
-
-  it('falls back when the LLM returns an empty answer', async () => {
-    embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.2));
-    qdrantService.search.mockResolvedValue([createChunk()]);
-    llmService.generateAnswer.mockResolvedValue('');
-
-    const result = await chatService.ask({
-      question: 'What does the document say?',
-    });
-
-    expect(result.answer).toBe(ragConfig.fallbackAnswer);
   });
 
   it('creates a conversation with multiple selected documents', async () => {

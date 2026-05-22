@@ -55,20 +55,6 @@ export class QdrantService {
     });
   }
 
-  async search(vector: number[], limit: number): Promise<RetrievedChunk[]> {
-    await this.ensureCollection();
-    const results = await this.client.search(qdrantConfig.collectionName, {
-      vector,
-      limit,
-      with_payload: true,
-      with_vector: false,
-    });
-
-    return results
-      .map((result) => this.toRetrievedChunk(result))
-      .filter((chunk): chunk is RetrievedChunk => chunk !== null);
-  }
-
   async searchByDocumentIds(
     vector: number[],
     limit: number,

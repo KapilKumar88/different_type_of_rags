@@ -33,10 +33,6 @@ export type ConversationDetails = Conversation & {
   messages: ConversationMessage[];
 };
 
-export type AskQuestionPayload = {
-  question: string;
-};
-
 export type CreateConversationPayload = {
   title?: string;
   documentIds: string[];
@@ -52,15 +48,6 @@ export type UpdateConversationDocumentsPayload = {
 
 export type CreateMessagePayload = {
   content: string;
-};
-
-export type AskQuestionResponse = {
-  success: true;
-  message: string;
-  data: {
-    answer: string;
-    sources: SourceChunk[];
-  };
 };
 
 export type ConversationListResponse = {

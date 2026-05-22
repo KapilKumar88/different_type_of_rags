@@ -16,7 +16,6 @@ import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CurrentUser } from '../../../guard/decorators/current-user.decorator';
 import type { SafeUser } from '../../../types/auth.types';
 import { ChatService } from './chat.service';
-import { askQuestionSchema, type AskQuestionDto } from './dto/ask-question.dto';
 import {
   conversationIdSchema,
   type ConversationIdDto,
@@ -210,19 +209,5 @@ export class ChatController {
         closed = true;
       };
     });
-  }
-
-  @Post('ask')
-  @HttpCode(HttpStatus.OK)
-  async ask(
-    @Body(new ZodValidationPipe(askQuestionSchema)) dto: AskQuestionDto,
-  ) {
-    const result = await this.chatService.ask(dto);
-
-    return {
-      success: true,
-      message: 'Answer generated successfully',
-      data: result,
-    };
   }
 }

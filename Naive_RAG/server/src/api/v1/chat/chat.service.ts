@@ -15,16 +15,10 @@ import {
   ChatRepository,
   type ConversationWithDocumentIds,
 } from './chat.repository';
-import type { AskQuestionDto } from './dto/ask-question.dto';
 import type { CreateConversationDto } from './dto/create-conversation.dto';
 import type { CreateMessageDto } from './dto/create-message.dto';
 import type { UpdateConversationDocumentsDto } from './dto/update-conversation-documents.dto';
 import type { UpdateConversationDto } from './dto/update-conversation.dto';
-
-export type AskQuestionResult = {
-  answer: string;
-  sources: RetrievedChunk[];
-};
 
 export type ConversationSummary = ConversationWithDocumentIds;
 
@@ -38,16 +32,6 @@ export type ConversationAnswerContext = {
 };
 
 export type ChatStreamEventType = 'sources' | 'token' | 'done' | 'error';
-
-const promptTemplate = `You are a helpful assistant. Answer the user's question using only the provided context. If the answer is not available in the context, say: I could not find this information in the uploaded document.
-
-Context:
-{context}
-
-Question:
-{question}
-
-Answer:`;
 
 const conversationPromptTemplate = `You are a helpful assistant. Answer the latest user message using only the provided context and the conversation history. If the answer is not available in the context, say: I could not find this information in the uploaded document.
 
@@ -257,38 +241,6 @@ export class ChatService {
     }
   }
 
-  async ask(dto: AskQuestionDto): Promise<AskQuestionResult> {
-    // 1. Embed the user's question into the same vector space as the chunks.
-    const questionVector = await this.embeddingsService.embedQuery(
-      dto.question,
-    );
-
-    // 2. Retrieve only the top K most similar chunks from Qdrant.
-    const sources = await this.qdrantService.search(
-      questionVector,
-      ragConfig.topK,
-    );
-
-    if (sources.length === 0) {
-      return {
-        answer: ragConfig.fallbackAnswer,
-        sources: [],
-      };
-    }
-
-    // 3. Put only the retrieved chunks into the prompt context.
-    const context = this.formatContext(sources);
-    const prompt = this.buildPrompt(context, dto.question);
-
-    // 4. Ask the LLM to answer using only the retrieved context.
-    const answer = await this.llmService.generateAnswer(prompt);
-
-    return {
-      answer: answer || ragConfig.fallbackAnswer,
-      sources,
-    };
-  }
-
   private formatContext(sources: RetrievedChunk[]): string {
     return sources
       .map((source, index) => {
@@ -298,12 +250,6 @@ export class ChatService {
         return `Source ${index + 1} (${source.fileName}${pageText}):\n${source.text}`;
       })
       .join('\n\n');
-  }
-
-  private buildPrompt(context: string, question: string): string {
-    return promptTemplate
-      .replace('{context}', context)
-      .replace('{question}', question);
   }
 
   private buildConversationPrompt(

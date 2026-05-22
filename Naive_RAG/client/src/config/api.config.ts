@@ -20,7 +20,6 @@ export const apiConfig = {
       delete: (id: string) => `/api/v1/documents/${pathSegment(id)}`,
     },
     chat: {
-      ask: "/api/v1/chat/ask",
       conversations: "/api/v1/chat/conversations",
       conversation: (id: string) => `/api/v1/chat/conversations/${pathSegment(id)}`,
       updateConversation: (id: string) => `/api/v1/chat/conversations/${pathSegment(id)}`,

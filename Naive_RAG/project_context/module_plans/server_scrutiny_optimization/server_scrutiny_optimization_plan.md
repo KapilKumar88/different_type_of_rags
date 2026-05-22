@@ -42,19 +42,19 @@ Out of scope unless approved in a later task:
 
 ## Task Status
 
-| Task                                              | File                     | Status   | Focus                | Notes                                                                       |
-| ------------------------------------------------- | ------------------------ | -------- | -------------------- | --------------------------------------------------------------------------- |
-| Task 01: Restore Server Build After Service Move  | [task_01.md](task_01.md) | Approved | Build breakage       | User approved and requested Task 02 implementation.                         |
-| Task 02: Enforce Document Ownership               | [task_02.md](task_02.md) | Review   | Security             | Documents are scoped to users across DB, service, API, and chat validation. |
-| Task 03: Remove Or Scope Global Ask Retrieval     | [task_03.md](task_03.md) | Pending  | Security             | Prevent cross-document vector retrieval from `/api/v1/chat/ask`.            |
-| Task 04: Harden Upload Limits And Validation      | [task_04.md](task_04.md) | Pending  | Security/performance | Add upload size, MIME, content, extraction, and chunk limits.               |
-| Task 05: Add Postgres/Qdrant Consistency Strategy | [task_05.md](task_05.md) | Pending  | Reliability          | Prevent orphan vectors and stale metadata after partial failures.           |
-| Task 06: Add RAG Abuse Controls                   | [task_06.md](task_06.md) | Pending  | Reliability/security | Add throttling and concurrency controls to expensive RAG endpoints.         |
-| Task 07: Harden Prompt Context Boundaries         | [task_07.md](task_07.md) | Pending  | Security             | Treat documents/history as untrusted context and add token budgeting.       |
-| Task 08: Fix SSE Authorization And Error Leakage  | [task_08.md](task_08.md) | Pending  | Security             | Check ownership before message fetch and emit stable public errors.         |
-| Task 09: Add Swagger Coverage                     | [task_09.md](task_09.md) | Pending  | API documentation    | Configure Swagger and document endpoint responses.                          |
-| Task 10: Tighten TypeScript Strictness            | [task_10.md](task_10.md) | Pending  | Maintainability      | Enable stricter checks in staged backend-safe steps.                        |
-| Task 11: Preserve Repository Hygiene              | [task_11.md](task_11.md) | Pending  | Maintainability      | Keep generated/runtime files out of review scope and tracking.              |
+| Task                                              | File                     | Status   | Focus                | Notes                                                                 |
+| ------------------------------------------------- | ------------------------ | -------- | -------------------- | --------------------------------------------------------------------- |
+| Task 01: Restore Server Build After Service Move  | [task_01.md](task_01.md) | Approved | Build breakage       | User approved and requested Task 02 implementation.                   |
+| Task 02: Enforce Document Ownership               | [task_02.md](task_02.md) | Approved | Security             | User approved and requested Task 03 implementation.                   |
+| Task 03: Remove Or Scope Global Ask Retrieval     | [task_03.md](task_03.md) | Review   | Security             | Removed legacy `/api/v1/chat/ask` and unscoped Qdrant search.         |
+| Task 04: Harden Upload Limits And Validation      | [task_04.md](task_04.md) | Pending  | Security/performance | Add upload size, MIME, content, extraction, and chunk limits.         |
+| Task 05: Add Postgres/Qdrant Consistency Strategy | [task_05.md](task_05.md) | Pending  | Reliability          | Prevent orphan vectors and stale metadata after partial failures.     |
+| Task 06: Add RAG Abuse Controls                   | [task_06.md](task_06.md) | Pending  | Reliability/security | Add throttling and concurrency controls to expensive RAG endpoints.   |
+| Task 07: Harden Prompt Context Boundaries         | [task_07.md](task_07.md) | Pending  | Security             | Treat documents/history as untrusted context and add token budgeting. |
+| Task 08: Fix SSE Authorization And Error Leakage  | [task_08.md](task_08.md) | Pending  | Security             | Check ownership before message fetch and emit stable public errors.   |
+| Task 09: Add Swagger Coverage                     | [task_09.md](task_09.md) | Pending  | API documentation    | Configure Swagger and document endpoint responses.                    |
+| Task 10: Tighten TypeScript Strictness            | [task_10.md](task_10.md) | Pending  | Maintainability      | Enable stricter checks in staged backend-safe steps.                  |
+| Task 11: Preserve Repository Hygiene              | [task_11.md](task_11.md) | Pending  | Maintainability      | Keep generated/runtime files out of review scope and tracking.        |
 
 ## Key Technical Decisions
 
@@ -81,7 +81,7 @@ Out of scope unless approved in a later task:
 - Task 01 verification:
   - `npm run build` from `server/` passed.
   - `npm test -- chat.service.spec.ts documents.service.spec.ts qdrant.service.spec.ts --runInBand` from `server/` passed with `3` suites and `32` tests.
-- Task 02 is ready for review.
+- Task 02 is approved.
 - Task 02 implementation:
   - Added `documents.userId` with a `users.id` foreign key and `documents_user_id_idx`.
   - Added migration `0003_happy_vertigo.sql`; it deliberately clears old unowned RAG conversations/documents before enforcing non-null document ownership.
@@ -91,3 +91,14 @@ Out of scope unless approved in a later task:
 - Task 02 verification:
   - `npm run build` from `server/` passed.
   - `npm test -- chat.service.spec.ts documents.service.spec.ts --runInBand` from `server/` passed with `2` suites and `33` tests.
+- Task 03 is ready for review.
+- Task 03 implementation:
+  - Removed the legacy `POST /api/v1/chat/ask` controller endpoint and DTO.
+  - Removed `ChatService.ask` and its unscoped prompt path.
+  - Removed `QdrantService.search`, leaving only document-scoped `searchByDocumentIds`.
+  - Removed unused client ask endpoint config, service method, and types.
+  - Verified no references remain to `chat/ask`, `AskQuestion*`, or unscoped `qdrantService.search`.
+- Task 03 verification:
+  - `npm run build` from `server/` passed.
+  - `npm test -- chat.service.spec.ts qdrant.service.spec.ts --runInBand` from `server/` passed with `2` suites and `25` tests.
+  - `npm run build` from `client/` passed.

@@ -29,3 +29,15 @@ Prevent `/api/v1/chat/ask` from searching every vector in Qdrant.
 ## Review Gate
 
 Stop after this task and wait for user review before starting Task 04.
+
+## Completion Notes
+
+- Removed the legacy `POST /api/v1/chat/ask` endpoint instead of keeping a second scoped ask path.
+- Deleted the unused ask DTO and removed `ChatService.ask`.
+- Removed unscoped `QdrantService.search`; retrieval now goes through `searchByDocumentIds`.
+- Removed unused client ask endpoint config, service method, and types.
+- Verified no references remain to `chat/ask`, `AskQuestion*`, or unscoped `qdrantService.search`.
+- Verification passed:
+  - `npm run build` from `server/`
+  - `npm test -- chat.service.spec.ts qdrant.service.spec.ts --runInBand` from `server/`
+  - `npm run build` from `client/`

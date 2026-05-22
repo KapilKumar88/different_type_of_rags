@@ -2,8 +2,6 @@ import { apiConfig } from "@/config/api.config";
 import { apiClient } from "@/lib/api-client";
 import { clientLogger } from "@/lib/client-logger";
 import type {
-  AskQuestionPayload,
-  AskQuestionResponse,
   ChatStreamHandlers,
   ConversationDetailsResponse,
   ConversationListResponse,
@@ -39,13 +37,6 @@ function emitStreamError(handlers: ChatStreamHandlers, message: string, recovera
 }
 
 export const chatService = {
-  ask(payload: AskQuestionPayload): Promise<AskQuestionResponse> {
-    return apiClient.post<AskQuestionResponse, AskQuestionPayload>(
-      apiConfig.endpoints.chat.ask,
-      payload,
-    );
-  },
-
   listConversations(): Promise<ConversationListResponse> {
     return apiClient.get<ConversationListResponse>(apiConfig.endpoints.chat.conversations);
   },

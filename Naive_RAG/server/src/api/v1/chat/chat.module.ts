@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { DocumentsModule } from '../documents/documents.module';
-import { EmbeddingsModule } from '../embeddings/embeddings.module';
-import { LlmModule } from '../llm/llm.module';
-import { QdrantModule } from '../qdrant/qdrant.module';
+import { EmbeddingsModule } from '../../../services/embeddings/embeddings.module';
+import { LlmModule } from '../../../services/llm/llm.module';
+import { QdrantModule } from '../../../services/qdrant/qdrant.module';
 import { ChatController } from './chat.controller';
 import { ChatRepository } from './chat.repository';
 import { ChatService } from './chat.service';

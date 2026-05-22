@@ -1,7 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { OllamaEmbeddings } from '@langchain/ollama';
-import { ollamaConfig } from '../../../config/ollama.config';
-import { qdrantConfig } from '../../../config/qdrant.config';
+import { ollamaConfig } from '../../config/ollama.config';
+import { qdrantConfig } from '../../config/qdrant.config';
 
 @Injectable()
 export class EmbeddingsService {

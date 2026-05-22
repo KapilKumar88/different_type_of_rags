@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ChatOllama } from '@langchain/ollama';
 import { HumanMessage } from '@langchain/core/messages';
-import { ollamaConfig } from '../../../config/ollama.config';
+import { ollamaConfig } from '../../config/ollama.config';
 
 @Injectable()
 export class LlmService {

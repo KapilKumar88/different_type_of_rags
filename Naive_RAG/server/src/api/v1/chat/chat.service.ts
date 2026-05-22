@@ -8,9 +8,9 @@ import { ragConfig } from '../../../config/rag.config';
 import type { ConversationMessage } from '../../../database/schemas';
 import type { RetrievedChunk } from '../../../types/rag.types';
 import { DocumentsService } from '../documents/documents.service';
-import { EmbeddingsService } from '../embeddings/embeddings.service';
-import { LlmService } from '../llm/llm.service';
-import { QdrantService } from '../qdrant/qdrant.service';
+import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
+import { LlmService } from '../../../services/llm/llm.service';
+import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import {
   ChatRepository,
   type ConversationWithDocumentIds,

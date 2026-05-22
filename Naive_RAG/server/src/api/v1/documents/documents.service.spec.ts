@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { Document } from '../../../database/schemas';
-import { EmbeddingsService } from '../embeddings/embeddings.service';
-import { QdrantService } from '../qdrant/qdrant.service';
+import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
+import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import { DocumentsRepository } from './documents.repository';
 import { DocumentsService, type UploadedDocumentFile } from './documents.service';
 

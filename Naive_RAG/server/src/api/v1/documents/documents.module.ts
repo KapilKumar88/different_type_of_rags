@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { EmbeddingsModule } from '../embeddings/embeddings.module';
-import { QdrantModule } from '../qdrant/qdrant.module';
+import { EmbeddingsModule } from '../../../services/embeddings/embeddings.module';
+import { QdrantModule } from '../../../services/qdrant/qdrant.module';
 import { DocumentsController } from './documents.controller';
 import { DocumentsRepository } from './documents.repository';
 import { DocumentsService } from './documents.service';

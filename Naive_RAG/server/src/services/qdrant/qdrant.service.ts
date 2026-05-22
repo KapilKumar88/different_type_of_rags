@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import type { Schemas } from '@qdrant/js-client-rest';
-import { qdrantConfig } from '../../../config/qdrant.config';
+import { qdrantConfig } from '../../config/qdrant.config';
 import type {
   ChunkPayload,
   RetrievedChunk,
   VectorPoint,
-} from '../../../types/rag.types';
+} from '../../types/rag.types';
 
 type QdrantPayload = Schemas['Payload'];
 type ScoredPointPayload = Schemas['ScoredPoint'];

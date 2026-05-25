@@ -1,6 +1,6 @@
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { ragConfig } from '../../../../config/rag.config';
-import type { ExtractedDocumentText } from './text-extractor';
+import type { ParsedDocument } from '../../../../types/document-parsing.types';
 
 export type TextChunk = {
   text: string;
@@ -13,7 +13,7 @@ const splitter = new RecursiveCharacterTextSplitter({
 });
 
 export async function splitDocumentText(
-  documentText: ExtractedDocumentText,
+  documentText: ParsedDocument,
 ): Promise<TextChunk[]> {
   const chunks: TextChunk[] = [];
 

@@ -12,6 +12,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
+import { documentUploadConfig } from '../../../config/document-upload.config';
 import { CurrentUser } from '../../../guard/decorators/current-user.decorator';
 import type { SafeUser } from '../../../types/auth.types';
 import { documentIdSchema, type DocumentIdDto } from './dto/document-id.dto';
@@ -19,6 +20,7 @@ import {
   DocumentsService,
   type UploadedDocumentFile,
 } from './documents.service';
+import { DocumentUploadValidationPipe } from './pipes/document-upload-validation.pipe';
 
 @Controller('api/v1/documents')
 export class DocumentsController {
@@ -28,11 +30,15 @@ export class DocumentsController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
+      limits: {
+        fileSize: documentUploadConfig.maxFileSizeBytes,
+      },
     }),
   )
   async upload(
     @CurrentUser() user: SafeUser,
-    @UploadedFile() file: UploadedDocumentFile | undefined,
+    @UploadedFile(DocumentUploadValidationPipe)
+    file: UploadedDocumentFile,
   ) {
     const document = await this.documentsService.upload(user.id, file);
 

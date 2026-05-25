@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { documentUploadConfig } from '../../../config/document-upload.config';
 import type { Document } from '../../../database/schemas';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
@@ -7,6 +8,7 @@ import {
   DocumentsService,
   type UploadedDocumentFile,
 } from './documents.service';
+import { DocumentParsingService } from '../../../services/parsing/document-parsing.service';
 
 const createdAt = new Date('2026-01-01T00:00:00.000Z');
 const updatedAt = new Date('2026-01-01T00:00:00.000Z');
@@ -41,6 +43,7 @@ describe('DocumentsService', () => {
   let documentsRepository: jest.Mocked<DocumentsRepository>;
   let embeddingsService: jest.Mocked<EmbeddingsService>;
   let qdrantService: jest.Mocked<QdrantService>;
+  let documentParsingService: jest.Mocked<DocumentParsingService>;
   let documentsService: DocumentsService;
 
   beforeEach(() => {
@@ -58,10 +61,24 @@ describe('DocumentsService', () => {
       upsertPoints: jest.fn(),
       deleteByDocumentId: jest.fn(),
     } as unknown as jest.Mocked<QdrantService>;
+    documentParsingService = {
+      isSupportedDocument: jest.fn(),
+      validateDocumentFileType: jest.fn(),
+      parseDocument: jest.fn(
+        async (
+          _fileName: string,
+          _mimeType: string | undefined,
+          buffer: Buffer,
+        ) => ({
+          pages: [{ text: buffer.toString('utf8') }],
+        }),
+      ),
+    } as unknown as jest.Mocked<DocumentParsingService>;
     documentsService = new DocumentsService(
       documentsRepository,
       embeddingsService,
       qdrantService,
+      documentParsingService,
     );
   });
 
@@ -72,6 +89,11 @@ describe('DocumentsService', () => {
 
     const result = await documentsService.upload('user-1', createFile());
 
+    expect(documentParsingService.parseDocument).toHaveBeenCalledWith(
+      'rag-notes.txt',
+      'text/plain',
+      expect.any(Buffer),
+    );
     expect(embeddingsService.embedDocuments).toHaveBeenCalledWith([
       'Naive RAG retrieves chunks from Qdrant.',
     ]);
@@ -96,10 +118,24 @@ describe('DocumentsService', () => {
     expect(result).toBe(document);
   });
 
-  it('rejects missing files', async () => {
-    await expect(
-      documentsService.upload('user-1', undefined),
-    ).rejects.toBeInstanceOf(BadRequestException);
+  it('keeps parser page numbers on vector payloads', async () => {
+    const document = createDocument();
+    documentParsingService.parseDocument.mockResolvedValue({
+      pages: [{ text: 'Page specific text', pageNumber: 4 }],
+    });
+    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.2)]);
+    documentsRepository.create.mockResolvedValue(document);
+
+    await documentsService.upload('user-1', createFile());
+
+    expect(qdrantService.upsertPoints).toHaveBeenCalledWith([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          text: 'Page specific text',
+          pageNumber: 4,
+        }),
+      }),
+    ]);
   });
 
   it('rejects documents with no readable text', async () => {
@@ -109,6 +145,38 @@ describe('DocumentsService', () => {
         createFile({ buffer: Buffer.from('   ') }),
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects documents with too much extracted text', async () => {
+    const text = 'a'.repeat(
+      documentUploadConfig.maxExtractedTextCharacters + 1,
+    );
+
+    await expect(
+      documentsService.upload(
+        'user-1',
+        createFile({
+          size: Buffer.byteLength(text),
+          buffer: Buffer.from(text),
+        }),
+      ),
+    ).rejects.toThrow('Document text is too large to index');
+    expect(embeddingsService.embedDocuments).not.toHaveBeenCalled();
+  });
+
+  it('rejects documents that create too many chunks', async () => {
+    const text = 'a'.repeat(900_000);
+
+    await expect(
+      documentsService.upload(
+        'user-1',
+        createFile({
+          size: Buffer.byteLength(text),
+          buffer: Buffer.from(text),
+        }),
+      ),
+    ).rejects.toThrow('Document has too many chunks to index');
+    expect(embeddingsService.embedDocuments).not.toHaveBeenCalled();
   });
 
   it('lists only documents owned by the user', async () => {

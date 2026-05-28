@@ -5,6 +5,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { configureCsrfProtection } from './common/security/csrf-protection';
 import { configureSecurityHeaders } from './common/security/security-headers';
 import { appConfig } from './config/app.config';
+import { setupSwagger } from './swagger/openapi';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -16,6 +17,11 @@ async function bootstrap() {
   app.use(cookieParser());
   configureCsrfProtection(app);
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  if (appConfig.nodeEnv !== 'production') {
+    setupSwagger(app);
+  }
+
   await app.listen(appConfig.port);
 }
 bootstrap();

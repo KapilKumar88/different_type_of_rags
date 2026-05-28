@@ -3,6 +3,7 @@ import { documentUploadConfig } from '../../../config/document-upload.config';
 import type { Document } from '../../../database/schemas';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
+import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
 import { DocumentsRepository } from './documents.repository';
 import {
   DocumentsService,
@@ -44,6 +45,7 @@ describe('DocumentsService', () => {
   let embeddingsService: jest.Mocked<EmbeddingsService>;
   let qdrantService: jest.Mocked<QdrantService>;
   let documentParsingService: jest.Mocked<DocumentParsingService>;
+  let ragConcurrencyLimiter: jest.Mocked<RagConcurrencyLimiterService>;
   let documentsService: DocumentsService;
 
   beforeEach(() => {
@@ -74,11 +76,15 @@ describe('DocumentsService', () => {
         }),
       ),
     } as unknown as jest.Mocked<DocumentParsingService>;
+    ragConcurrencyLimiter = {
+      run: jest.fn(async (_key, task: () => Promise<unknown>) => task()),
+    } as unknown as jest.Mocked<RagConcurrencyLimiterService>;
     documentsService = new DocumentsService(
       documentsRepository,
       embeddingsService,
       qdrantService,
       documentParsingService,
+      ragConcurrencyLimiter,
     );
   });
 
@@ -136,6 +142,34 @@ describe('DocumentsService', () => {
         }),
       }),
     ]);
+  });
+
+  it('cleans up uploaded vectors when metadata creation fails', async () => {
+    const databaseError = new Error('database unavailable');
+    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
+    documentsRepository.create.mockRejectedValue(databaseError);
+
+    await expect(
+      documentsService.upload('user-1', createFile()),
+    ).rejects.toThrow(databaseError);
+
+    const upsertedPoints = qdrantService.upsertPoints.mock.calls[0]?.[0];
+    const documentId = upsertedPoints?.[0]?.payload.documentId;
+    expect(documentId).toEqual(expect.any(String));
+    expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(documentId);
+  });
+
+  it('does not create metadata when Qdrant upsert fails', async () => {
+    const qdrantError = new Error('qdrant unavailable');
+    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
+    qdrantService.upsertPoints.mockRejectedValue(qdrantError);
+
+    await expect(
+      documentsService.upload('user-1', createFile()),
+    ).rejects.toThrow(qdrantError);
+
+    expect(documentsRepository.create).not.toHaveBeenCalled();
+    expect(qdrantService.deleteByDocumentId).not.toHaveBeenCalled();
   });
 
   it('rejects documents with no readable text', async () => {
@@ -217,6 +251,56 @@ describe('DocumentsService', () => {
       document.id,
     );
     expect(result).toBe(document);
+  });
+
+  it('does not delete metadata when Qdrant deletion fails', async () => {
+    const document = createDocument();
+    const qdrantError = new Error('qdrant unavailable');
+    documentsRepository.findByIdForUser.mockResolvedValue(document);
+    qdrantService.deleteByDocumentId.mockRejectedValueOnce(qdrantError);
+
+    await expect(
+      documentsService.delete('user-1', document.id),
+    ).rejects.toThrow(qdrantError);
+
+    expect(documentsRepository.deleteByIdForUser).not.toHaveBeenCalled();
+  });
+
+  it('can retry document deletion after a transient Qdrant failure', async () => {
+    const document = createDocument();
+    const qdrantError = new Error('qdrant unavailable');
+    documentsRepository.findByIdForUser.mockResolvedValue(document);
+    qdrantService.deleteByDocumentId
+      .mockRejectedValueOnce(qdrantError)
+      .mockResolvedValueOnce(undefined);
+    documentsRepository.deleteByIdForUser.mockResolvedValue(document);
+
+    await expect(
+      documentsService.delete('user-1', document.id),
+    ).rejects.toThrow(qdrantError);
+    await expect(documentsService.delete('user-1', document.id)).resolves.toBe(
+      document,
+    );
+
+    expect(qdrantService.deleteByDocumentId).toHaveBeenCalledTimes(2);
+    expect(documentsRepository.deleteByIdForUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates metadata deletion failures after Qdrant cleanup so callers can retry', async () => {
+    const document = createDocument();
+    const databaseError = new Error('database unavailable');
+    documentsRepository.findByIdForUser.mockResolvedValue(document);
+    documentsRepository.deleteByIdForUser.mockRejectedValue(databaseError);
+
+    await expect(
+      documentsService.delete('user-1', document.id),
+    ).rejects.toThrow(databaseError);
+
+    expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(document.id);
+    expect(documentsRepository.deleteByIdForUser).toHaveBeenCalledWith(
+      'user-1',
+      document.id,
+    );
   });
 
   it('rejects deletion when the document does not exist for the user', async () => {

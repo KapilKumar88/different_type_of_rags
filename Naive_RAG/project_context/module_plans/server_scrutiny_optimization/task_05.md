@@ -29,3 +29,21 @@ Avoid orphan Qdrant vectors and stale Postgres metadata when document upload or 
 ## Review Gate
 
 Stop after this task and wait for user review before starting Task 06.
+
+## Completion Notes
+
+- Added compensating Qdrant cleanup when document metadata creation fails after vector upsert.
+- Kept upload metadata creation blocked when Qdrant upsert fails.
+- Kept delete ordering as Qdrant cleanup before metadata deletion so Qdrant failures leave database metadata untouched and retryable.
+- Propagated metadata delete failures after Qdrant cleanup so callers can retry the idempotent Qdrant delete plus metadata delete path.
+- Fixed a Jest-incompatible absolute helper import in `DocumentParsingService` discovered during verification.
+- Added tests for:
+  - Metadata creation failure after Qdrant upsert triggering vector cleanup.
+  - Qdrant upsert failure preventing metadata creation.
+  - Qdrant delete failure preserving metadata.
+  - Successful retry after transient Qdrant delete failure.
+  - Metadata delete failure propagation after Qdrant cleanup.
+- Verification passed:
+  - `npm run build`
+  - `npm test -- documents.service.spec.ts --runInBand`
+  - `npm test -- document-parsing.service.spec.ts document-upload-validation.pipe.spec.ts --runInBand`

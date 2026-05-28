@@ -30,3 +30,18 @@ Ensure SSE answer generation validates ownership before reading messages and doe
 ## Review Gate
 
 Stop after this task and wait for user review before starting Task 09.
+
+## Completion Notes
+
+- Changed SSE answer generation to validate conversation ownership before loading the target message.
+- Reused the owned conversation's document scope for stream retrieval.
+- Mapped stream exceptions to stable public error payloads:
+  - `not_found`: `Conversation or message not found`
+  - `bad_request`: `Invalid chat stream request`
+  - `stream_failed`: `Unable to stream assistant response`
+- Added tests that prevent cross-user message probing and raw dependency error leakage.
+
+## Verification
+
+- `npm test -- chat.service.spec.ts --runInBand` from `server/` passed with `1` suite and `28` tests.
+- `npm run build` from `server/` passed.

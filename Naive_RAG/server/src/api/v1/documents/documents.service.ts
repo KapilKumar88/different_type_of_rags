@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
@@ -8,6 +9,7 @@ import { documentUploadConfig } from '../../../config/document-upload.config';
 import type { Document } from '../../../database/schemas';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
+import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
 import type { VectorPoint } from '../../../types/rag.types';
 import { DocumentsRepository } from './documents.repository';
 import { splitDocumentText } from './helpers/text-splitter';
@@ -22,19 +24,26 @@ export type UploadedDocumentFile = {
 
 @Injectable()
 export class DocumentsService {
+  private readonly logger = new Logger(DocumentsService.name);
+
   constructor(
     private readonly documentsRepository: DocumentsRepository,
     private readonly embeddingsService: EmbeddingsService,
     private readonly qdrantService: QdrantService,
     private readonly documentParsingService: DocumentParsingService,
+    private readonly ragConcurrencyLimiter: RagConcurrencyLimiterService,
   ) {}
 
   async upload(userId: string, file: UploadedDocumentFile): Promise<Document> {
     // 1. Extract readable text from the uploaded document.
-    const extractedText = await this.documentParsingService.parseDocument(
-      file.originalname,
-      file.mimetype,
-      file.buffer,
+    const extractedText = await this.ragConcurrencyLimiter.run(
+      'document-parsing',
+      () =>
+        this.documentParsingService.parseDocument(
+          file.originalname,
+          file.mimetype,
+          file.buffer,
+        ),
     );
     const text = extractedText.pages
       .map((page) => page.text)
@@ -66,8 +75,8 @@ export class DocumentsService {
     const documentId = randomUUID();
 
     // 3. Generate embeddings for every chunk.
-    const vectors = await this.embeddingsService.embedDocuments(
-      chunks.map((chunk) => chunk.text),
+    const vectors = await this.ragConcurrencyLimiter.run('embedding', () =>
+      this.embeddingsService.embedDocuments(chunks.map((chunk) => chunk.text)),
     );
 
     // 4. Store each chunk embedding and its payload as one Qdrant point.
@@ -91,17 +100,24 @@ export class DocumentsService {
       };
     });
 
-    await this.qdrantService.upsertPoints(points);
+    await this.ragConcurrencyLimiter.run('qdrant-write', () =>
+      this.qdrantService.upsertPoints(points),
+    );
 
-    // 5. Persist document-level metadata for listing and deletion.
-    return this.documentsRepository.create({
-      id: documentId,
-      userId,
-      fileName: file.originalname,
-      mimeType: file.mimetype || 'application/octet-stream',
-      sizeBytes: file.size,
-      chunkCount: chunks.length,
-    });
+    try {
+      // 5. Persist document-level metadata for listing and deletion.
+      return await this.documentsRepository.create({
+        id: documentId,
+        userId,
+        fileName: file.originalname,
+        mimeType: file.mimetype || 'application/octet-stream',
+        sizeBytes: file.size,
+        chunkCount: chunks.length,
+      });
+    } catch (error) {
+      await this.cleanupUploadedVectors(documentId);
+      throw error;
+    }
   }
 
   list(userId: string): Promise<Document[]> {
@@ -130,5 +146,16 @@ export class DocumentsService {
     }
 
     return deletedDocument;
+  }
+
+  private async cleanupUploadedVectors(documentId: string): Promise<void> {
+    try {
+      await this.qdrantService.deleteByDocumentId(documentId);
+    } catch (cleanupError) {
+      this.logger.error(
+        `Failed to clean up Qdrant vectors after document metadata write failure for ${documentId}`,
+        cleanupError instanceof Error ? cleanupError.stack : undefined,
+      );
+    }
   }
 }

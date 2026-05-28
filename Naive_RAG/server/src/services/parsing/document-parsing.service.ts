@@ -14,7 +14,7 @@ import { PlainTextDocumentParser } from './parsers/plain-text-document.parser';
 import {
   getFileExtension,
   normalizeMimeType,
-} from 'src/common/helpers/file.helpers';
+} from '../../common/helpers/file.helpers';
 
 @Injectable()
 export class DocumentParsingService {

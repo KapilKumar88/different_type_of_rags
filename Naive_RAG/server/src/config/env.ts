@@ -36,6 +36,29 @@ const envSchema = z
     OLLAMA_EMBEDDING_MODEL: z.string().min(1).default('nomic-embed-text:v1.5'),
     OLLAMA_LLM_MODEL: z.string().min(1).default('minimax-m2.5:cloud'),
     RAG_TOP_K: z.coerce.number().int().positive().default(5),
+    RAG_UPLOAD_RATE_LIMIT_TTL_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(60000),
+    RAG_UPLOAD_RATE_LIMIT_LIMIT: z.coerce.number().int().positive().default(5),
+    RAG_CHAT_RATE_LIMIT_TTL_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(60000),
+    RAG_CHAT_RATE_LIMIT_LIMIT: z.coerce.number().int().positive().default(30),
+    RAG_STREAM_RATE_LIMIT_TTL_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(60000),
+    RAG_STREAM_RATE_LIMIT_LIMIT: z.coerce.number().int().positive().default(10),
+    RAG_RUNTIME_CONCURRENCY_LIMIT: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(4),
   })
   .superRefine((env, context) => {
     if (env.NODE_ENV !== 'production') {

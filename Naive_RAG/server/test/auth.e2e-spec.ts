@@ -23,6 +23,9 @@ const VALID_REGISTER_PAYLOAD = {
 
 function buildMockAuthRepository(users: User[]) {
   return {
+    checkEmailExists: jest.fn(async (email: string): Promise<boolean> => {
+      return users.some((u) => u.email === email);
+    }),
     findByEmail: jest.fn(async (email: string): Promise<User | null> => {
       return users.find((u) => u.email === email) ?? null;
     }),

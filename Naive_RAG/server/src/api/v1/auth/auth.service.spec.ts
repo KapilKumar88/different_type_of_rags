@@ -27,6 +27,7 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     authRepository = {
+      checkEmailExists: jest.fn(),
       findByEmail: jest.fn(),
       findById: jest.fn(),
       create: jest.fn(),
@@ -40,7 +41,7 @@ describe('AuthService', () => {
 
   it('registers a new user and returns a safe user with a token', async () => {
     const user = createUser({ passwordHash: 'stored-hash' });
-    authRepository.findByEmail.mockResolvedValue(null);
+    authRepository.checkEmailExists.mockResolvedValue(false);
     authRepository.create.mockResolvedValue(user);
     jwtService.signAsync.mockResolvedValue('signed-token');
 
@@ -72,7 +73,7 @@ describe('AuthService', () => {
   });
 
   it('rejects duplicate registration emails', async () => {
-    authRepository.findByEmail.mockResolvedValue(createUser());
+    authRepository.checkEmailExists.mockResolvedValue(true);
 
     await expect(
       authService.register({

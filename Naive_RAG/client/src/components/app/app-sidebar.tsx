@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { MessageSquare, FileText, BarChart3, Settings, LogOut, Sparkles } from "lucide-react";
+import { MessageSquare, FileText, LogOut, Sparkles } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -18,8 +18,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ApiClientError } from "@/lib/api-client";
@@ -30,12 +28,26 @@ import { toast } from "sonner";
 const items = [
   { title: "Chat", url: "/app/chat", icon: MessageSquare },
   { title: "Documents", url: "/app/documents", icon: FileText },
-  { title: "Usage Stats", url: "/app/usage", icon: BarChart3 },
-  { title: "Settings", url: "/app/settings", icon: Settings },
 ];
+
+function getInitials(name?: string) {
+  if (!name) {
+    return "U";
+  }
+
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+
+  return initials || "U";
+}
 
 export function AppSidebar() {
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
   const setUnauthenticated = useAuthStore((state) => state.setUnauthenticated);
   const logoutMutation = useMutation({
     mutationFn: authService.logout,
@@ -100,26 +112,20 @@ export function AppSidebar() {
             <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent">
               <Avatar className="h-8 w-8 shrink-0">
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  AL
+                  {getInitials(user?.name)}
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
                 <div className="truncate text-sm font-medium text-sidebar-foreground">
-                  Ada Lovelace
+                  {user?.name ?? "Account"}
                 </div>
-                <div className="truncate text-xs text-sidebar-foreground/60">ada@company.com</div>
+                <div className="truncate text-xs text-sidebar-foreground/60">
+                  {user?.email ?? "Signed in"}
+                </div>
               </div>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-56">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link to="/app/settings">
-                <Settings className="mr-2 h-4 w-4" /> Settings
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={handleSignOut} disabled={logoutMutation.isPending}>
               <LogOut className="mr-2 h-4 w-4" />
               {logoutMutation.isPending ? "Signing out..." : "Sign out"}

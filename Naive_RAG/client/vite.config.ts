@@ -29,16 +29,6 @@ function getManualChunk(id: string): string | undefined {
   }
 
   if (
-    normalizedId.includes("/node_modules/recharts/") ||
-    normalizedId.includes("/node_modules/d3-") ||
-    normalizedId.includes("/node_modules/victory-vendor/") ||
-    normalizedId.includes("/node_modules/react-smooth/") ||
-    normalizedId.includes("/node_modules/decimal.js-light/")
-  ) {
-    return "vendor-charts";
-  }
-
-  if (
     normalizedId.includes("/node_modules/react-markdown/") ||
     normalizedId.includes("/node_modules/remark-gfm/") ||
     normalizedId.includes("/node_modules/remark-parse/") ||

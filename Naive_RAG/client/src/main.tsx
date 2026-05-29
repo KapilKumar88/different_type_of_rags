@@ -17,23 +17,11 @@ const ChatPage = React.lazy(() =>
 const DocumentsPage = React.lazy(() =>
   import("@/routes/app.documents").then((module) => ({ default: module.DocumentsPage })),
 );
-const SettingsPage = React.lazy(() =>
-  import("@/routes/app.settings").then((module) => ({ default: module.SettingsPage })),
-);
-const UsagePage = React.lazy(() =>
-  import("@/routes/app.usage").then((module) => ({ default: module.UsagePage })),
-);
-const ForgotPasswordPage = React.lazy(() =>
-  import("@/routes/forgot-password").then((module) => ({ default: module.ForgotPasswordPage })),
-);
 const LoginPage = React.lazy(() =>
   import("@/routes/login").then((module) => ({ default: module.LoginPage })),
 );
 const RegisterPage = React.lazy(() =>
   import("@/routes/register").then((module) => ({ default: module.RegisterPage })),
-);
-const ResetPasswordPage = React.lazy(() =>
-  import("@/routes/reset-password").then((module) => ({ default: module.ResetPasswordPage })),
 );
 
 const routeLoadingElement = (
@@ -59,8 +47,6 @@ const router = createBrowserRouter([
           { path: "/register", element: withRouteSuspense(<RegisterPage />) },
         ],
       },
-      { path: "/forgot-password", element: withRouteSuspense(<ForgotPasswordPage />) },
-      { path: "/reset-password", element: withRouteSuspense(<ResetPasswordPage />) },
       {
         element: <AuthGuard />,
         children: [
@@ -71,8 +57,6 @@ const router = createBrowserRouter([
               { index: true, element: <Navigate to="/app/chat" replace /> },
               { path: "chat", element: withRouteSuspense(<ChatPage />) },
               { path: "documents", element: withRouteSuspense(<DocumentsPage />) },
-              { path: "usage", element: withRouteSuspense(<UsagePage />) },
-              { path: "settings", element: withRouteSuspense(<SettingsPage />) },
             ],
           },
         ],

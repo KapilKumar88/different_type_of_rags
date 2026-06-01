@@ -8,12 +8,12 @@ export type SourceChunk = {
   createdAt: string;
 };
 
-export type RetrievalStrategy = "query_rewriting";
+export type RetrievalStrategy = "multi_query";
 
 export type RetrievalMetadata = {
   originalQuery: string;
-  rewrittenQuery: string;
-  wasRewritten: boolean;
+  generatedQueries: string[];
+  usedQueryCount: number;
   strategy: RetrievalStrategy;
   createdAt: string;
 };

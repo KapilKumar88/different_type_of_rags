@@ -1,5 +1,6 @@
 import cookieParser from 'cookie-parser';
 import { NestFactory } from '@nestjs/core';
+import type { Server } from 'node:http';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { configureCsrfProtection } from './common/security/csrf-protection';
@@ -17,6 +18,7 @@ async function bootstrap() {
   configureCsrfProtection(app);
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  await app.listen(appConfig.port);
+  const server = (await app.listen(appConfig.port)) as Server;
+  server.requestTimeout = appConfig.requestTimeoutMs;
 }
 bootstrap();

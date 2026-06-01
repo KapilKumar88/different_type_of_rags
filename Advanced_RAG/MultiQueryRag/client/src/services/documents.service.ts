@@ -14,6 +14,9 @@ export const documentsService = {
     return apiClient.post<DocumentMutationResponse, FormData>(
       apiConfig.endpoints.documents.upload,
       formData,
+      {
+        timeoutMs: apiConfig.requestTimeouts.documentUpload,
+      },
     );
   },
 

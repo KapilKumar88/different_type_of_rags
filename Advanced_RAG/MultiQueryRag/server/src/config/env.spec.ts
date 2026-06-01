@@ -19,6 +19,12 @@ describe('server environment config', () => {
     expect(parsedEnvironment.DATABASE_URL).toBe(validEnvironment.DATABASE_URL);
   });
 
+  it('applies long-running request timeout defaults for large uploads', () => {
+    const parsedEnvironment = parseEnvironment(validEnvironment);
+
+    expect(parsedEnvironment.SERVER_REQUEST_TIMEOUT_MS).toBe(600000);
+  });
+
   it('loads values from a dotenv-style file', () => {
     const tempDirectory = mkdtempSync(join(tmpdir(), 'rag-env-'));
     const envFilePath = join(tempDirectory, '.env');

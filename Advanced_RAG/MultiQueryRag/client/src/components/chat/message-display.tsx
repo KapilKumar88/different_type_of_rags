@@ -167,10 +167,23 @@ export function EmptyState({
 }
 
 function RetrievalAudit({ retrievalMetadata }: Readonly<{ retrievalMetadata: RetrievalMetadata }>) {
+  const queryLabel =
+    retrievalMetadata.usedQueryCount === 1 ? "Generated search query" : "Generated search queries";
+
   return (
     <div className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
-      <span className="font-medium text-foreground">Search query:</span>{" "}
-      <span className="text-muted-foreground">{retrievalMetadata.rewrittenQuery}</span>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="font-medium text-foreground">{queryLabel}</span>
+        <span className="shrink-0 text-muted-foreground">{retrievalMetadata.usedQueryCount}</span>
+      </div>
+      <ol className="space-y-1">
+        {retrievalMetadata.generatedQueries.map((query, index) => (
+          <li key={`${query}-${index}`} className="flex min-w-0 gap-2 text-muted-foreground">
+            <span className="shrink-0 tabular-nums">{index + 1}.</span>
+            <span className="min-w-0 break-words">{query}</span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

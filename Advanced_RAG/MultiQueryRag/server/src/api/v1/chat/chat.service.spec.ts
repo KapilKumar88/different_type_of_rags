@@ -8,11 +8,11 @@ import type {
 import { DocumentsService } from '../documents/documents.service';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { LlmService } from '../../../services/llm/llm.service';
-import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import {
-  QueryRewritingService,
-  type RewriteQueryInput,
-} from '../../../services/query-rewriting/query-rewriting.service';
+  MultiQueryService,
+  type GenerateMultiQueryInput,
+} from '../../../services/multi-query/multi-query.service';
+import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
 import { ChatRepository } from './chat.repository';
 import { ChatService } from './chat.service';
@@ -50,9 +50,9 @@ function createRetrievalMetadata(
 ): RetrievalMetadata {
   return {
     originalQuery: 'What does this say?',
-    rewrittenQuery: 'What does this say?',
-    wasRewritten: false,
-    strategy: 'query_rewriting',
+    generatedQueries: ['What does this say?'],
+    usedQueryCount: 1,
+    strategy: 'multi_query',
     createdAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
@@ -82,7 +82,7 @@ describe('ChatService', () => {
   let llmService: jest.Mocked<LlmService>;
   let chatRepository: jest.Mocked<ChatRepository>;
   let documentsService: jest.Mocked<DocumentsService>;
-  let queryRewritingService: jest.Mocked<QueryRewritingService>;
+  let multiQueryService: jest.Mocked<MultiQueryService>;
   let ragConcurrencyLimiter: jest.Mocked<RagConcurrencyLimiterService>;
   let chatService: ChatService;
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
@@ -114,14 +114,15 @@ describe('ChatService', () => {
     documentsService = {
       findByIds: jest.fn(),
     } as unknown as jest.Mocked<DocumentsService>;
-    queryRewritingService = {
-      rewriteQuery: jest.fn(async (input: RewriteQueryInput) =>
+    multiQueryService = {
+      generateQueries: jest.fn(async (input: GenerateMultiQueryInput) =>
         createRetrievalMetadata({
           originalQuery: input.latestUserMessage,
-          rewrittenQuery: input.latestUserMessage,
+          generatedQueries: [input.latestUserMessage],
+          usedQueryCount: 1,
         }),
       ),
-    } as unknown as jest.Mocked<QueryRewritingService>;
+    } as unknown as jest.Mocked<MultiQueryService>;
     ragConcurrencyLimiter = {
       run: jest.fn(async (_key, task: () => Promise<unknown>) => task()),
       runStream: jest.fn(async function* (
@@ -139,7 +140,7 @@ describe('ChatService', () => {
       llmService,
       chatRepository,
       documentsService,
-      queryRewritingService,
+      multiQueryService,
       ragConcurrencyLimiter,
     );
   });
@@ -574,20 +575,38 @@ describe('ChatService', () => {
       updatedAt,
       documentIds: ['document-1', 'document-2'],
     };
-    const questionVector = Array(768).fill(0.3);
-    const sources = [
-      createChunk({ documentId: 'document-1' }),
-      createChunk({ chunkId: 'chunk-2', documentId: 'document-2' }),
-    ];
+    const firstQuestionVector = Array(768).fill(0.3);
+    const secondQuestionVector = Array(768).fill(0.4);
+    const lowerScoredDuplicate = createChunk({
+      documentId: 'document-1',
+      score: 0.72,
+    });
+    const higherScoredDuplicate = createChunk({
+      documentId: 'document-1',
+      score: 0.95,
+    });
+    const secondSource = createChunk({
+      chunkId: 'chunk-2',
+      documentId: 'document-2',
+      score: 0.88,
+    });
+    const sources = [higherScoredDuplicate, secondSource];
     const retrievalMetadata = createRetrievalMetadata({
       originalQuery: 'What does this say?',
-      rewrittenQuery: 'standalone rewritten retrieval query',
-      wasRewritten: true,
+      generatedQueries: [
+        'What does this say?',
+        'standalone alternate retrieval query',
+      ],
+      usedQueryCount: 2,
     });
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
-    queryRewritingService.rewriteQuery.mockResolvedValue(retrievalMetadata);
-    embeddingsService.embedQuery.mockResolvedValue(questionVector);
-    qdrantService.searchByDocumentIds.mockResolvedValue(sources);
+    multiQueryService.generateQueries.mockResolvedValue(retrievalMetadata);
+    embeddingsService.embedQuery
+      .mockResolvedValueOnce(firstQuestionVector)
+      .mockResolvedValueOnce(secondQuestionVector);
+    qdrantService.searchByDocumentIds
+      .mockResolvedValueOnce([lowerScoredDuplicate])
+      .mockResolvedValueOnce([higherScoredDuplicate, secondSource]);
 
     const result = await chatService.getConversationAnswerContext(
       'user-1',
@@ -595,15 +614,27 @@ describe('ChatService', () => {
       'What does this say?',
     );
 
-    expect(queryRewritingService.rewriteQuery).toHaveBeenCalledWith({
+    expect(multiQueryService.generateQueries).toHaveBeenCalledWith({
       latestUserMessage: 'What does this say?',
       historyMessages: [],
     });
-    expect(embeddingsService.embedQuery).toHaveBeenCalledWith(
-      'standalone rewritten retrieval query',
+    expect(embeddingsService.embedQuery).toHaveBeenNthCalledWith(
+      1,
+      'What does this say?',
     );
-    expect(qdrantService.searchByDocumentIds).toHaveBeenCalledWith(
-      questionVector,
+    expect(embeddingsService.embedQuery).toHaveBeenNthCalledWith(
+      2,
+      'standalone alternate retrieval query',
+    );
+    expect(qdrantService.searchByDocumentIds).toHaveBeenNthCalledWith(
+      1,
+      firstQuestionVector,
+      ragConfig.topK,
+      ['document-1', 'document-2'],
+    );
+    expect(qdrantService.searchByDocumentIds).toHaveBeenNthCalledWith(
+      2,
+      secondQuestionVector,
       ragConfig.topK,
       ['document-1', 'document-2'],
     );
@@ -659,8 +690,8 @@ describe('ChatService', () => {
     const sources = [createChunk({ documentId: 'document-1' })];
     const retrievalMetadata = createRetrievalMetadata({
       originalQuery: 'What is the current answer?',
-      rewrittenQuery: 'current answer from RAG documents',
-      wasRewritten: true,
+      generatedQueries: ['current answer from RAG documents'],
+      usedQueryCount: 1,
     });
     const assistantMessage: ConversationMessage = {
       id: 'message-4',
@@ -675,7 +706,7 @@ describe('ChatService', () => {
     chatRepository.findMessageByConversation.mockResolvedValue(userMessage);
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
     chatRepository.findMessagesByConversation.mockResolvedValue(history);
-    queryRewritingService.rewriteQuery.mockResolvedValue(retrievalMetadata);
+    multiQueryService.generateQueries.mockResolvedValue(retrievalMetadata);
     embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
     qdrantService.searchByDocumentIds.mockResolvedValue(sources);
     llmService.streamAnswer.mockReturnValue(
@@ -707,7 +738,7 @@ describe('ChatService', () => {
     expect(llmService.streamAnswer).toHaveBeenCalledWith(
       expect.not.stringContaining('User: What is the current answer?'),
     );
-    expect(queryRewritingService.rewriteQuery).toHaveBeenCalledWith({
+    expect(multiQueryService.generateQueries).toHaveBeenCalledWith({
       latestUserMessage: 'What is the current answer?',
       historyMessages: [
         {
@@ -919,7 +950,8 @@ describe('ChatService', () => {
       sources: [],
       retrievalMetadata: createRetrievalMetadata({
         originalQuery: 'Unknown answer?',
-        rewrittenQuery: 'Unknown answer?',
+        generatedQueries: ['Unknown answer?'],
+        usedQueryCount: 1,
       }),
       createdAt,
       updatedAt,
@@ -941,7 +973,8 @@ describe('ChatService', () => {
     expect(llmService.streamAnswer).not.toHaveBeenCalled();
     const retrievalMetadata = createRetrievalMetadata({
       originalQuery: 'Unknown answer?',
-      rewrittenQuery: 'Unknown answer?',
+      generatedQueries: ['Unknown answer?'],
+      usedQueryCount: 1,
     });
     expect(chatRepository.createMessage).toHaveBeenCalledWith({
       conversationId: 'conversation-1',
@@ -979,7 +1012,8 @@ describe('ChatService', () => {
     const sources = [createChunk({ documentId: 'document-1' })];
     const retrievalMetadata = createRetrievalMetadata({
       originalQuery: 'Answer?',
-      rewrittenQuery: 'Answer?',
+      generatedQueries: ['Answer?'],
+      usedQueryCount: 1,
     });
     const assistantMessage: ConversationMessage = {
       id: 'message-2',
@@ -1164,7 +1198,8 @@ describe('ChatService', () => {
 
     const retrievalMetadata = createRetrievalMetadata({
       originalQuery: 'Answer?',
-      rewrittenQuery: 'Answer?',
+      generatedQueries: ['Answer?'],
+      usedQueryCount: 1,
     });
     expect(events).toEqual([
       { type: 'sources', data: { sources, retrievalMetadata } },

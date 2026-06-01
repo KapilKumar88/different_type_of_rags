@@ -6,6 +6,9 @@ function pathSegment(value: string): string {
 
 export const apiConfig = {
   baseUrl: envConfig.apiBaseUrl,
+  requestTimeouts: {
+    documentUpload: envConfig.documentUploadTimeoutMs,
+  },
   endpoints: {
     csrf: "/api/v1/csrf-token",
     auth: {

@@ -17,12 +17,14 @@ export type RetrievedChunk = ChunkPayload & {
   score: number;
 };
 
-export type RetrievalStrategy = 'query_rewriting';
+export type RetrievalStrategy = 'multi_query';
 
-export type RetrievalMetadata = {
+export type MultiQueryRetrievalMetadata = {
   originalQuery: string;
-  rewrittenQuery: string;
-  wasRewritten: boolean;
-  strategy: RetrievalStrategy;
+  generatedQueries: string[];
+  usedQueryCount: number;
+  strategy: 'multi_query';
   createdAt: string;
 };
+
+export type RetrievalMetadata = MultiQueryRetrievalMetadata;

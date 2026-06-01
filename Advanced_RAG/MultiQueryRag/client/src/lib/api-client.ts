@@ -7,6 +7,8 @@ type RequestOptions = Omit<RequestInit, "body" | "credentials"> & {
   timeoutMs?: number;
 };
 
+type RequestOptionsWithoutBody = Omit<RequestOptions, "body" | "method">;
+
 export class ApiClientError extends Error {
   readonly status: number;
   readonly data: unknown;
@@ -187,8 +189,13 @@ export const apiClient = {
     return this.request<TResponse>(path, { method: "GET" });
   },
 
-  post<TResponse, TPayload>(path: string, payload: TPayload): Promise<TResponse> {
+  post<TResponse, TPayload>(
+    path: string,
+    payload: TPayload,
+    options: RequestOptionsWithoutBody = {},
+  ): Promise<TResponse> {
     return this.request<TResponse>(path, {
+      ...options,
       method: "POST",
       body: payload,
     });

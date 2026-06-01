@@ -13,8 +13,8 @@ import type {
 import { DocumentsService } from '../documents/documents.service';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { LlmService } from '../../../services/llm/llm.service';
+import { MultiQueryService } from '../../../services/multi-query/multi-query.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
-import { QueryRewritingService } from '../../../services/query-rewriting/query-rewriting.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
 import {
   ChatRepository,
@@ -78,7 +78,7 @@ export class ChatService {
     private readonly llmService: LlmService,
     private readonly chatRepository: ChatRepository,
     private readonly documentsService: DocumentsService,
-    private readonly queryRewritingService: QueryRewritingService,
+    private readonly multiQueryService: MultiQueryService,
     private readonly ragConcurrencyLimiter: RagConcurrencyLimiterService,
   ) {}
 
@@ -256,6 +256,7 @@ export class ChatService {
         userMessage.content,
       );
       const tokens: string[] = [];
+      console.log('Generated prompt for LLM:', prompt);
 
       for await (const token of this.ragConcurrencyLimiter.runStream(
         'llm-stream',
@@ -296,9 +297,9 @@ export class ChatService {
     historyMessages: ConversationMessage[],
   ): Promise<ConversationRetrievalResult> {
     const retrievalMetadata = await this.ragConcurrencyLimiter.run(
-      'llm-rewrite',
+      'llm-multi-query',
       () =>
-        this.queryRewritingService.rewriteQuery({
+        this.multiQueryService.generateQueries({
           latestUserMessage: question,
           historyMessages: historyMessages.map((message) => ({
             role: message.role,
@@ -306,22 +307,63 @@ export class ChatService {
           })),
         }),
     );
-    const questionVector = await this.ragConcurrencyLimiter.run(
-      'embedding',
-      () => this.embeddingsService.embedQuery(retrievalMetadata.rewrittenQuery),
-    );
-    const sources = await this.ragConcurrencyLimiter.run('qdrant-search', () =>
-      this.qdrantService.searchByDocumentIds(
-        questionVector,
-        ragConfig.topK,
-        conversation.documentIds,
-      ),
+    const sources = await this.retrieveSourcesForQueries(
+      retrievalMetadata.generatedQueries,
+      conversation.documentIds,
     );
 
     return {
       sources,
       retrievalMetadata,
     };
+  }
+
+  private async retrieveSourcesForQueries(
+    queries: string[],
+    documentIds: string[],
+  ): Promise<RetrievedChunk[]> {
+    const retrievedChunks: RetrievedChunk[] = [];
+
+    for (const query of queries) {
+      const querySources = await this.retrieveSourcesForQuery(query, documentIds);
+      retrievedChunks.push(...querySources);
+    }
+
+    return this.rankRetrievedChunks(retrievedChunks);
+  }
+
+  private async retrieveSourcesForQuery(
+    query: string,
+    documentIds: string[],
+  ): Promise<RetrievedChunk[]> {
+    const questionVector = await this.ragConcurrencyLimiter.run(
+      'embedding',
+      () => this.embeddingsService.embedQuery(query),
+    );
+
+    return this.ragConcurrencyLimiter.run('qdrant-search', () =>
+      this.qdrantService.searchByDocumentIds(
+        questionVector,
+        ragConfig.topK,
+        documentIds,
+      ),
+    );
+  }
+
+  private rankRetrievedChunks(chunks: RetrievedChunk[]): RetrievedChunk[] {
+    const chunksById = new Map<string, RetrievedChunk>();
+
+    for (const chunk of chunks) {
+      const existingChunk = chunksById.get(chunk.chunkId);
+
+      if (!existingChunk || chunk.score > existingChunk.score) {
+        chunksById.set(chunk.chunkId, chunk);
+      }
+    }
+
+    return [...chunksById.values()]
+      .sort((firstChunk, secondChunk) => secondChunk.score - firstChunk.score)
+      .slice(0, ragConfig.topK);
   }
 
   private excludeLatestUserMessage(

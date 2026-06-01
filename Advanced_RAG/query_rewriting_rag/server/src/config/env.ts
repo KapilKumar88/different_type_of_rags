@@ -35,7 +35,7 @@ const envSchema = z
     OLLAMA_BASE_URL: z.url().default('http://localhost:11434'),
     OLLAMA_EMBEDDING_MODEL: z.string().min(1).default('nomic-embed-text:v1.5'),
     OLLAMA_LLM_MODEL: z.string().min(1).default('minimax-m2.5:cloud'),
-    RAG_TOP_K: z.coerce.number().int().positive().default(5),
+    RAG_TOP_K: z.coerce.number().int().positive().default(15),
     RAG_UPLOAD_RATE_LIMIT_TTL_MS: z.coerce
       .number()
       .int()

@@ -1,4 +1,4 @@
-import type { SourceChunk } from "@/types/chat.types";
+import type { RetrievalMetadata, SourceChunk } from "@/types/chat.types";
 
 export type ChatMessage = {
   id: string;
@@ -6,6 +6,7 @@ export type ChatMessage = {
   content: string;
   createdAt?: string;
   sources?: SourceChunk[];
+  retrievalMetadata?: RetrievalMetadata;
   pending?: boolean;
   failed?: boolean;
   retryMessageId?: string;

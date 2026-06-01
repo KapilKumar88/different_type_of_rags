@@ -408,13 +408,15 @@ export function ChatPage() {
     setStreaming(true);
 
     streamCleanupRef.current = chatService.streamMessage(conversationId, userMessageId, {
-      onSources: ({ sources }) => {
+      onSources: ({ sources, retrievalMetadata }) => {
         if (activeStreamIdRef.current !== streamId) {
           return;
         }
 
         setMessages((current) =>
-          current.map((message) => (message.id === pendingId ? { ...message, sources } : message)),
+          current.map((message) =>
+            message.id === pendingId ? { ...message, sources, retrievalMetadata } : message,
+          ),
         );
       },
       onToken: ({ token }) => {
@@ -503,6 +505,7 @@ export function ChatPage() {
               ...item,
               content: "",
               sources: [],
+              retrievalMetadata: undefined,
               pending: true,
               failed: false,
               retryAttempt,

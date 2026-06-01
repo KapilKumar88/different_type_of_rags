@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/chat/markdown";
 import { suggestedPrompts } from "@/components/chat/chat.constants";
 import { formatRelativeTime } from "@/components/chat/chat.helpers";
-import type { SourceChunk } from "@/types/chat.types";
+import type { RetrievalMetadata, SourceChunk } from "@/types/chat.types";
 import type { ChatMessage } from "@/types/chat-ui.types";
 import { toast } from "sonner";
 
@@ -49,6 +49,9 @@ export function MessageRow({
             <StreamingDots />
           )}
         </div>
+        {!isUser && message.retrievalMetadata && (
+          <RetrievalAudit retrievalMetadata={message.retrievalMetadata} />
+        )}
         {!isUser && message.sources && message.sources.length > 0 && (
           <SourceChunks sources={message.sources} />
         )}
@@ -159,6 +162,15 @@ export function EmptyState({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function RetrievalAudit({ retrievalMetadata }: Readonly<{ retrievalMetadata: RetrievalMetadata }>) {
+  return (
+    <div className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+      <span className="font-medium text-foreground">Search query:</span>{" "}
+      <span className="text-muted-foreground">{retrievalMetadata.rewrittenQuery}</span>
     </div>
   );
 }

@@ -10,6 +10,7 @@ export function toChatMessage(message: ConversationMessage): ChatMessage {
     content: message.content,
     createdAt: message.createdAt,
     sources: message.sources ?? undefined,
+    retrievalMetadata: message.retrievalMetadata ?? undefined,
   };
 }
 

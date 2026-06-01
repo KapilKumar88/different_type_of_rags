@@ -8,6 +8,16 @@ export type SourceChunk = {
   createdAt: string;
 };
 
+export type RetrievalStrategy = "query_rewriting";
+
+export type RetrievalMetadata = {
+  originalQuery: string;
+  rewrittenQuery: string;
+  wasRewritten: boolean;
+  strategy: RetrievalStrategy;
+  createdAt: string;
+};
+
 export type ConversationMessageRole = "user" | "assistant";
 
 export type ConversationMessage = {
@@ -16,6 +26,7 @@ export type ConversationMessage = {
   role: ConversationMessageRole;
   content: string;
   sources: SourceChunk[] | null;
+  retrievalMetadata: RetrievalMetadata | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -108,6 +119,7 @@ export type CreateMessageResponse = {
 
 export type SourcesStreamEvent = {
   sources: SourceChunk[];
+  retrievalMetadata: RetrievalMetadata;
 };
 
 export type TokenStreamEvent = {

@@ -4,7 +4,7 @@ export const ragConfig = {
   topK: env.RAG_TOP_K,
   chunkSize: 800,
   chunkOverlap: 100,
-  maxPromptContextCharacters: 6000,
+  maxPromptContextCharacters: 12000,
   maxPromptHistoryCharacters: 3000,
   fallbackAnswer: 'I could not find this information in the uploaded document.',
 } as const;

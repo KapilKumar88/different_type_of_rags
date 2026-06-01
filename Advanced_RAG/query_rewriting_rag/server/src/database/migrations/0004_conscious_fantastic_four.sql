@@ -1,0 +1,1 @@
+ALTER TABLE "conversation_messages" ADD COLUMN "retrieval_metadata" jsonb;

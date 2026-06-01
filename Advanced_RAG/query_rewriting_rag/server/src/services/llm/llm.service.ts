@@ -5,28 +5,41 @@ import { ollamaConfig } from '../../config/ollama.config';
 
 @Injectable()
 export class LlmService {
-  private readonly model = new ChatOllama({
-    baseUrl: ollamaConfig.baseUrl,
-    model: ollamaConfig.llmModel,
-    temperature: 0,
-  });
+  private readonly model = Object.assign(
+    new ChatOllama(ollamaConfig.llmModel, {
+      baseUrl: ollamaConfig.baseUrl,
+    }),
+    { temperature: 0 },
+  );
 
   async generateAnswer(prompt: string): Promise<string> {
     const response = await this.model.invoke([new HumanMessage(prompt)]);
 
-    return this.contentToText(response.content).trim();
+    return this.messageToText(response).trim();
   }
 
   async *streamAnswer(prompt: string): AsyncGenerator<string> {
-    const stream = await this.model.stream([new HumanMessage(prompt)]);
+    const stream = this.model.streamV2([new HumanMessage(prompt)]);
 
-    for await (const chunk of stream) {
-      const token = this.contentToText(chunk.content);
-
-      if (token) {
-        yield token;
-      }
+    for await (const token of stream.text) {
+      yield token;
     }
+  }
+
+  private messageToText(message: unknown): string {
+    if (!message || typeof message !== 'object') {
+      return '';
+    }
+
+    if ('text' in message && typeof message.text === 'string') {
+      return message.text;
+    }
+
+    if (!('content' in message)) {
+      return '';
+    }
+
+    return this.contentToText(message.content);
   }
 
   private contentToText(content: unknown): string {
@@ -44,7 +57,12 @@ export class LlmService {
           return item;
         }
 
-        if ('text' in item && typeof item.text === 'string') {
+        if (
+          item &&
+          typeof item === 'object' &&
+          'text' in item &&
+          typeof item.text === 'string'
+        ) {
           return item.text;
         }
 

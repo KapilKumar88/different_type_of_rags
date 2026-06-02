@@ -42,6 +42,12 @@ const envSchema = z
     OLLAMA_LLM_MODEL: z.string().min(1).default('minimax-m2.5:cloud'),
     RAG_TOP_K: z.coerce.number().int().positive().default(8),
     RAG_MULTI_QUERY_COUNT: z.coerce.number().int().positive().default(5),
+    RAG_SELF_RAG_MAX_ATTEMPTS: z.coerce.number().int().positive().default(2),
+    RAG_SELF_RAG_CANDIDATE_MULTIPLIER: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(2),
     RAG_UPLOAD_RATE_LIMIT_TTL_MS: z.coerce
       .number()
       .int()

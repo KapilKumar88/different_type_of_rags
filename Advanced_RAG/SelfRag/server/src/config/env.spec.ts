@@ -25,6 +25,13 @@ describe('server environment config', () => {
     expect(parsedEnvironment.SERVER_REQUEST_TIMEOUT_MS).toBe(600000);
   });
 
+  it('applies Self-RAG evaluator defaults', () => {
+    const parsedEnvironment = parseEnvironment(validEnvironment);
+
+    expect(parsedEnvironment.RAG_SELF_RAG_MAX_ATTEMPTS).toBe(2);
+    expect(parsedEnvironment.RAG_SELF_RAG_CANDIDATE_MULTIPLIER).toBe(2);
+  });
+
   it('loads values from a dotenv-style file', () => {
     const tempDirectory = mkdtempSync(join(tmpdir(), 'rag-env-'));
     const envFilePath = join(tempDirectory, '.env');

@@ -1,11 +1,32 @@
-import { Copy, FileText, MessageSquarePlus, Plus, RefreshCw, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  FileText,
+  MessageSquarePlus,
+  Plus,
+  RefreshCw,
+  RotateCw,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
+import type { ReactNode } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/chat/markdown";
 import { suggestedPrompts } from "@/components/chat/chat.constants";
 import { formatRelativeTime } from "@/components/chat/chat.helpers";
-import type { RetrievalMetadata, SourceChunk } from "@/types/chat.types";
+import type {
+  MultiQueryRetrievalMetadata,
+  RetrievalMetadata,
+  SelfRagAttemptTrace,
+  SelfRagChunkEvaluation,
+  SelfRagFinalDecision,
+  SourceChunk,
+} from "@/types/chat.types";
 import type { ChatMessage } from "@/types/chat-ui.types";
 import { toast } from "sonner";
 
@@ -167,6 +188,16 @@ export function EmptyState({
 }
 
 function RetrievalAudit({ retrievalMetadata }: Readonly<{ retrievalMetadata: RetrievalMetadata }>) {
+  if (retrievalMetadata.strategy === "self_rag") {
+    return <SelfRagTrace retrievalMetadata={retrievalMetadata} />;
+  }
+
+  return <MultiQueryAudit retrievalMetadata={retrievalMetadata} />;
+}
+
+function MultiQueryAudit({
+  retrievalMetadata,
+}: Readonly<{ retrievalMetadata: MultiQueryRetrievalMetadata }>) {
   const queryLabel =
     retrievalMetadata.usedQueryCount === 1 ? "Generated search query" : "Generated search queries";
 
@@ -186,6 +217,250 @@ function RetrievalAudit({ retrievalMetadata }: Readonly<{ retrievalMetadata: Ret
       </ol>
     </div>
   );
+}
+
+function SelfRagTrace({
+  retrievalMetadata,
+}: Readonly<{
+  retrievalMetadata: Extract<RetrievalMetadata, { strategy: "self_rag" }>;
+}>) {
+  const answerEvaluation = retrievalMetadata.answerEvaluation;
+
+  return (
+    <details className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Self-RAG trace</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <DecisionBadge decision={retrievalMetadata.finalDecision} />
+          <span className="text-muted-foreground">{retrievalMetadata.attempts.length} tries</span>
+        </span>
+      </summary>
+
+      <div className="mt-3 space-y-3">
+        <TraceSection title="Answer check">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <EvaluationBadge
+              value={answerEvaluation.verdict}
+              icon={<CheckCircle2 className="h-3 w-3" />}
+            />
+            <EvaluationBadge
+              value={answerEvaluation.utility}
+              icon={<Sparkles className="h-3 w-3" />}
+            />
+          </div>
+          <p className="mt-1.5 leading-5 text-muted-foreground">{answerEvaluation.reason}</p>
+        </TraceSection>
+
+        <TraceSection title="Queries">
+          <ol className="space-y-1">
+            {retrievalMetadata.generatedQueries.map((query, index) => (
+              <li key={`${query}-${index}`} className="flex min-w-0 gap-2 text-muted-foreground">
+                <span className="shrink-0 tabular-nums">{index + 1}.</span>
+                <span className="min-w-0 break-words">{query}</span>
+              </li>
+            ))}
+          </ol>
+        </TraceSection>
+
+        <div className="space-y-2">
+          {retrievalMetadata.attempts.map((attempt) => (
+            <AttemptTrace key={attempt.attemptNumber} attempt={attempt} />
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function AttemptTrace({ attempt }: Readonly<{ attempt: SelfRagAttemptTrace }>) {
+  return (
+    <details className="border-t border-border pt-2" open={attempt.attemptNumber === 1}>
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-foreground">
+        <span className="flex items-center gap-1.5 font-medium">
+          <Search className="h-3.5 w-3.5" />
+          Attempt {attempt.attemptNumber}
+        </span>
+        <span className="text-muted-foreground">
+          {attempt.acceptedChunkCount}/{attempt.retrievedChunkCount} accepted
+        </span>
+      </summary>
+
+      <div className="mt-2 space-y-2">
+        <TraceLine label="Seed" value={attempt.seedQuery} />
+        {attempt.refinementQuery && (
+          <TraceLine
+            label="Retry"
+            value={attempt.refinementQuery}
+            icon={<RotateCw className="h-3 w-3" />}
+          />
+        )}
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant="secondary" className="font-normal">
+            {attempt.retrievedChunkCount} retrieved
+          </Badge>
+          <Badge variant="secondary" className="font-normal">
+            {attempt.acceptedChunkCount} accepted
+          </Badge>
+          <Badge variant="outline" className="font-normal">
+            {attempt.rejectedChunkCount} rejected
+          </Badge>
+        </div>
+        <ChunkEvaluationList evaluations={attempt.chunkEvaluations} />
+      </div>
+    </details>
+  );
+}
+
+function ChunkEvaluationList({ evaluations }: Readonly<{ evaluations: SelfRagChunkEvaluation[] }>) {
+  if (evaluations.length === 0) {
+    return <p className="text-muted-foreground">No chunk evaluations recorded.</p>;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {evaluations.map((evaluation) => (
+        <div
+          key={evaluation.chunkId}
+          className="rounded-md border border-border/70 bg-background/50 p-2"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="min-w-0 break-words font-medium text-foreground">
+              {evaluation.fileName}
+              {evaluation.pageNumber ? ` · p.${evaluation.pageNumber}` : ""}
+            </span>
+            <span className="flex shrink-0 items-center gap-1.5">
+              <EvaluationBadge
+                value={formatChunkVerdict(evaluation.verdict)}
+                icon={getChunkVerdictIcon(evaluation.verdict)}
+              />
+              <span className="text-muted-foreground">{evaluation.score.toFixed(3)}</span>
+            </span>
+          </div>
+          <p className="mt-1 leading-5 text-muted-foreground">{evaluation.reason}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TraceSection({
+  title,
+  children,
+}: Readonly<{
+  title: string;
+  children: ReactNode;
+}>) {
+  return (
+    <section className="border-t border-border pt-2 first:border-t-0 first:pt-0">
+      <p className="mb-1.5 font-medium text-foreground">{title}</p>
+      {children}
+    </section>
+  );
+}
+
+function TraceLine({
+  label,
+  value,
+  icon,
+}: Readonly<{
+  label: string;
+  value: string;
+  icon?: ReactNode;
+}>) {
+  return (
+    <div className="flex min-w-0 gap-2 text-muted-foreground">
+      <span className="flex shrink-0 items-center gap-1 font-medium text-foreground">
+        {icon}
+        {label}
+      </span>
+      <span className="min-w-0 break-words">{value}</span>
+    </div>
+  );
+}
+
+function DecisionBadge({ decision }: Readonly<{ decision: SelfRagFinalDecision }>) {
+  const label = formatDecision(decision);
+  const className = getDecisionClassName(decision);
+
+  return (
+    <Badge variant="outline" className={className}>
+      {label}
+    </Badge>
+  );
+}
+
+function EvaluationBadge({
+  value,
+  icon,
+}: Readonly<{
+  value: string;
+  icon: ReactNode;
+}>) {
+  return (
+    <Badge variant="secondary" className="gap-1 font-normal">
+      {icon}
+      {formatEvaluationValue(value)}
+    </Badge>
+  );
+}
+
+function formatDecision(decision: SelfRagFinalDecision): string {
+  switch (decision) {
+    case "answered":
+      return "Answered";
+    case "insufficient_context":
+      return "Insufficient context";
+    case "unsupported_answer":
+      return "Unsupported";
+    case "evaluation_degraded":
+      return "Evaluation degraded";
+  }
+}
+
+function getDecisionClassName(decision: SelfRagFinalDecision): string {
+  switch (decision) {
+    case "answered":
+      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "insufficient_context":
+      return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    case "unsupported_answer":
+      return "border-destructive/40 bg-destructive/10 text-destructive";
+    case "evaluation_degraded":
+      return "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  }
+}
+
+function formatChunkVerdict(verdict: SelfRagChunkEvaluation["verdict"]): string {
+  switch (verdict) {
+    case "relevant":
+      return "relevant";
+    case "partially_relevant":
+      return "partial";
+    case "irrelevant":
+      return "irrelevant";
+    case "not_evaluated":
+      return "not evaluated";
+  }
+}
+
+function getChunkVerdictIcon(verdict: SelfRagChunkEvaluation["verdict"]) {
+  switch (verdict) {
+    case "relevant":
+      return <CheckCircle2 className="h-3 w-3" />;
+    case "partially_relevant":
+      return <AlertTriangle className="h-3 w-3" />;
+    case "irrelevant":
+      return <XCircle className="h-3 w-3" />;
+    case "not_evaluated":
+      return <ShieldCheck className="h-3 w-3" />;
+  }
+}
+
+function formatEvaluationValue(value: string): string {
+  return value.replace(/_/g, " ");
 }
 
 function SourceChunks({ sources }: Readonly<{ sources: SourceChunk[] }>) {

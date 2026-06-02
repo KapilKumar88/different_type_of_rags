@@ -65,7 +65,6 @@ export class MultiQueryService {
       const generatedQueries = this.parseGeneratedQueries(
         await this.llmService.generateAnswer(prompt),
       );
-      console.log('Generated queries from LLM:', generatedQueries);
 
       if (generatedQueries === null) {
         return this.createMetadata(originalQuery, [originalQuery]);

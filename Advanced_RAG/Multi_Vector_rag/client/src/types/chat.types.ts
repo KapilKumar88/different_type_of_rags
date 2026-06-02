@@ -1,3 +1,12 @@
+export type SourceVectorType = "original" | "summary" | "question";
+
+export type SourceVectorMatch = {
+  vectorId: string;
+  vectorType: SourceVectorType;
+  vectorText: string;
+  score: number;
+};
+
 export type SourceChunk = {
   chunkId: string;
   documentId: string;
@@ -5,6 +14,8 @@ export type SourceChunk = {
   text: string;
   pageNumber?: number;
   score: number;
+  bestMatchType?: SourceVectorType;
+  matches?: SourceVectorMatch[];
   createdAt: string;
 };
 

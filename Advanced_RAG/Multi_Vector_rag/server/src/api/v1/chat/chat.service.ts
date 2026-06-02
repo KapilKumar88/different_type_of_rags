@@ -8,9 +8,8 @@ import { ragConfig } from '../../../config/rag.config';
 import type { ConversationMessage } from '../../../database/schemas';
 import type { RetrievedChunk } from '../../../types/rag.types';
 import { DocumentsService } from '../documents/documents.service';
-import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { LlmService } from '../../../services/llm/llm.service';
-import { QdrantService } from '../../../services/qdrant/qdrant.service';
+import { MultiVectorRetrievalService } from '../../../services/multi-vector-rag/multi-vector-retrieval.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
 import {
   ChatRepository,
@@ -61,8 +60,7 @@ Answer:`;
 @Injectable()
 export class ChatService {
   constructor(
-    private readonly embeddingsService: EmbeddingsService,
-    private readonly qdrantService: QdrantService,
+    private readonly multiVectorRetrievalService: MultiVectorRetrievalService,
     private readonly llmService: LlmService,
     private readonly chatRepository: ChatRepository,
     private readonly documentsService: DocumentsService,
@@ -264,17 +262,10 @@ export class ChatService {
     conversation: ConversationWithDocumentIds,
     question: string,
   ): Promise<RetrievedChunk[]> {
-    const questionVector = await this.ragConcurrencyLimiter.run(
-      'embedding',
-      () => this.embeddingsService.embedQuery(question),
-    );
-
-    return this.ragConcurrencyLimiter.run('qdrant-search', () =>
-      this.qdrantService.searchByDocumentIds(
-        questionVector,
-        ragConfig.topK,
-        conversation.documentIds,
-      ),
+    return this.multiVectorRetrievalService.retrieveByDocumentIds(
+      question,
+      conversation.documentIds,
+      ragConfig.topK,
     );
   }
 

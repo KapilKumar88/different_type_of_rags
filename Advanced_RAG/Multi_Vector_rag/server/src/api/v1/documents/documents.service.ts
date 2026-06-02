@@ -7,10 +7,9 @@ import {
 import { randomUUID } from 'node:crypto';
 import { documentUploadConfig } from '../../../config/document-upload.config';
 import type { Document } from '../../../database/schemas';
-import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
+import { MultiVectorIndexingService } from '../../../services/multi-vector-rag/multi-vector-indexing.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
-import type { VectorPoint } from '../../../types/rag.types';
 import { DocumentsRepository } from './documents.repository';
 import { splitDocumentText } from './helpers/text-splitter';
 import { DocumentParsingService } from '../../../services/parsing/document-parsing.service';
@@ -28,8 +27,8 @@ export class DocumentsService {
 
   constructor(
     private readonly documentsRepository: DocumentsRepository,
-    private readonly embeddingsService: EmbeddingsService,
     private readonly qdrantService: QdrantService,
+    private readonly multiVectorIndexingService: MultiVectorIndexingService,
     private readonly documentParsingService: DocumentParsingService,
     private readonly ragConcurrencyLimiter: RagConcurrencyLimiterService,
   ) {}
@@ -74,38 +73,16 @@ export class DocumentsService {
     const createdAt = new Date().toISOString();
     const documentId = randomUUID();
 
-    // 3. Generate embeddings for every chunk.
-    const vectors = await this.ragConcurrencyLimiter.run('embedding', () =>
-      this.embeddingsService.embedDocuments(chunks.map((chunk) => chunk.text)),
-    );
-
-    // 4. Store each chunk embedding and its payload as one Qdrant point.
-    const points: VectorPoint[] = chunks.map((chunk, index) => {
-      const chunkId = randomUUID();
-      const payload = {
-        chunkId,
-        documentId,
-        fileName: file.originalname,
-        text: chunk.text,
-        createdAt,
-        ...(chunk.pageNumber === undefined
-          ? {}
-          : { pageNumber: chunk.pageNumber }),
-      };
-
-      return {
-        id: chunkId,
-        vector: vectors[index] ?? [],
-        payload,
-      };
+    // 3. Store original, summary, and hypothetical-question vectors.
+    await this.multiVectorIndexingService.indexDocument({
+      documentId,
+      fileName: file.originalname,
+      createdAt,
+      chunks,
     });
 
-    await this.ragConcurrencyLimiter.run('qdrant-write', () =>
-      this.qdrantService.upsertPoints(points),
-    );
-
     try {
-      // 5. Persist document-level metadata for listing and deletion.
+      // 4. Persist document-level metadata for listing and deletion.
       return await this.documentsRepository.create({
         id: documentId,
         userId,

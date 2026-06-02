@@ -19,6 +19,14 @@ describe('server environment config', () => {
     expect(parsedEnvironment.DATABASE_URL).toBe(validEnvironment.DATABASE_URL);
   });
 
+  it('applies multi-vector RAG defaults', () => {
+    const parsedEnvironment = parseEnvironment(validEnvironment);
+
+    expect(parsedEnvironment.RAG_MULTI_VECTOR_QUESTIONS_PER_CHUNK).toBe(3);
+    expect(parsedEnvironment.RAG_MULTI_VECTOR_GENERATION_BATCH_SIZE).toBe(8);
+    expect(parsedEnvironment.RAG_MULTI_VECTOR_SEARCH_MULTIPLIER).toBe(5);
+  });
+
   it('loads values from a dotenv-style file', () => {
     const tempDirectory = mkdtempSync(join(tmpdir(), 'rag-env-'));
     const envFilePath = join(tempDirectory, '.env');

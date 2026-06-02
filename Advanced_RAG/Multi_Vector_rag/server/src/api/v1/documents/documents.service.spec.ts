@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { documentUploadConfig } from '../../../config/document-upload.config';
 import type { Document } from '../../../database/schemas';
-import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
+import { MultiVectorIndexingService } from '../../../services/multi-vector-rag/multi-vector-indexing.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
 import { DocumentsRepository } from './documents.repository';
@@ -42,7 +42,7 @@ function createFile(
 
 describe('DocumentsService', () => {
   let documentsRepository: jest.Mocked<DocumentsRepository>;
-  let embeddingsService: jest.Mocked<EmbeddingsService>;
+  let multiVectorIndexingService: jest.Mocked<MultiVectorIndexingService>;
   let qdrantService: jest.Mocked<QdrantService>;
   let documentParsingService: jest.Mocked<DocumentParsingService>;
   let ragConcurrencyLimiter: jest.Mocked<RagConcurrencyLimiterService>;
@@ -56,9 +56,9 @@ describe('DocumentsService', () => {
       findByIdsForUser: jest.fn(),
       deleteByIdForUser: jest.fn(),
     } as unknown as jest.Mocked<DocumentsRepository>;
-    embeddingsService = {
-      embedDocuments: jest.fn(),
-    } as unknown as jest.Mocked<EmbeddingsService>;
+    multiVectorIndexingService = {
+      indexDocument: jest.fn(),
+    } as unknown as jest.Mocked<MultiVectorIndexingService>;
     qdrantService = {
       upsertPoints: jest.fn(),
       deleteByDocumentId: jest.fn(),
@@ -81,16 +81,15 @@ describe('DocumentsService', () => {
     } as unknown as jest.Mocked<RagConcurrencyLimiterService>;
     documentsService = new DocumentsService(
       documentsRepository,
-      embeddingsService,
       qdrantService,
+      multiVectorIndexingService,
       documentParsingService,
       ragConcurrencyLimiter,
     );
   });
 
-  it('extracts, chunks, embeds, stores vectors, and saves document metadata', async () => {
+  it('extracts, chunks, multi-vector indexes, and saves document metadata', async () => {
     const document = createDocument();
-    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
     documentsRepository.create.mockResolvedValue(document);
 
     const result = await documentsService.upload('user-1', createFile());
@@ -100,18 +99,13 @@ describe('DocumentsService', () => {
       'text/plain',
       expect.any(Buffer),
     );
-    expect(embeddingsService.embedDocuments).toHaveBeenCalledWith([
-      'Naive RAG retrieves chunks from Qdrant.',
-    ]);
-    expect(qdrantService.upsertPoints).toHaveBeenCalledWith([
+    expect(multiVectorIndexingService.indexDocument).toHaveBeenCalledWith(
       expect.objectContaining({
-        vector: Array(768).fill(0.1),
-        payload: expect.objectContaining({
-          fileName: 'rag-notes.txt',
-          text: 'Naive RAG retrieves chunks from Qdrant.',
-        }),
+        documentId: expect.any(String),
+        fileName: 'rag-notes.txt',
+        chunks: [{ text: 'Naive RAG retrieves chunks from Qdrant.' }],
       }),
-    ]);
+    );
     expect(documentsRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         fileName: 'rag-notes.txt',
@@ -129,44 +123,39 @@ describe('DocumentsService', () => {
     documentParsingService.parseDocument.mockResolvedValue({
       pages: [{ text: 'Page specific text', pageNumber: 4 }],
     });
-    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.2)]);
     documentsRepository.create.mockResolvedValue(document);
 
     await documentsService.upload('user-1', createFile());
 
-    expect(qdrantService.upsertPoints).toHaveBeenCalledWith([
+    expect(multiVectorIndexingService.indexDocument).toHaveBeenCalledWith(
       expect.objectContaining({
-        payload: expect.objectContaining({
-          text: 'Page specific text',
-          pageNumber: 4,
-        }),
+        chunks: [{ text: 'Page specific text', pageNumber: 4 }],
       }),
-    ]);
+    );
   });
 
   it('cleans up uploaded vectors when metadata creation fails', async () => {
     const databaseError = new Error('database unavailable');
-    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
     documentsRepository.create.mockRejectedValue(databaseError);
 
     await expect(
       documentsService.upload('user-1', createFile()),
     ).rejects.toThrow(databaseError);
 
-    const upsertedPoints = qdrantService.upsertPoints.mock.calls[0]?.[0];
-    const documentId = upsertedPoints?.[0]?.payload.documentId;
+    const indexedDocument = multiVectorIndexingService.indexDocument.mock
+      .calls[0]?.[0];
+    const documentId = indexedDocument?.documentId;
     expect(documentId).toEqual(expect.any(String));
     expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(documentId);
   });
 
-  it('does not create metadata when Qdrant upsert fails', async () => {
-    const qdrantError = new Error('qdrant unavailable');
-    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
-    qdrantService.upsertPoints.mockRejectedValue(qdrantError);
+  it('does not create metadata when multi-vector indexing fails', async () => {
+    const indexingError = new Error('qdrant unavailable');
+    multiVectorIndexingService.indexDocument.mockRejectedValue(indexingError);
 
     await expect(
       documentsService.upload('user-1', createFile()),
-    ).rejects.toThrow(qdrantError);
+    ).rejects.toThrow(indexingError);
 
     expect(documentsRepository.create).not.toHaveBeenCalled();
     expect(qdrantService.deleteByDocumentId).not.toHaveBeenCalled();
@@ -195,7 +184,7 @@ describe('DocumentsService', () => {
         }),
       ),
     ).rejects.toThrow('Document text is too large to index');
-    expect(embeddingsService.embedDocuments).not.toHaveBeenCalled();
+    expect(multiVectorIndexingService.indexDocument).not.toHaveBeenCalled();
   });
 
   it('rejects documents that create too many chunks', async () => {
@@ -210,7 +199,7 @@ describe('DocumentsService', () => {
         }),
       ),
     ).rejects.toThrow('Document has too many chunks to index');
-    expect(embeddingsService.embedDocuments).not.toHaveBeenCalled();
+    expect(multiVectorIndexingService.indexDocument).not.toHaveBeenCalled();
   });
 
   it('lists only documents owned by the user', async () => {

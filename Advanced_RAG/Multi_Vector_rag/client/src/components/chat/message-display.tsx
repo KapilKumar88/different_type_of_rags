@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/chat/markdown";
 import { suggestedPrompts } from "@/components/chat/chat.constants";
 import { formatRelativeTime } from "@/components/chat/chat.helpers";
-import type { SourceChunk } from "@/types/chat.types";
+import type { SourceChunk, SourceVectorMatch, SourceVectorType } from "@/types/chat.types";
 import type { ChatMessage } from "@/types/chat-ui.types";
 import { toast } from "sonner";
 
@@ -168,30 +168,76 @@ function SourceChunks({ sources }: Readonly<{ sources: SourceChunk[] }>) {
     <div className="w-full space-y-2">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-xs text-muted-foreground">Retrieved chunks:</span>
-        {sources.map((source) => (
-          <Badge key={source.chunkId} variant="secondary" className="gap-1 font-normal">
+        {sources.map((source, index) => (
+          <Badge
+            key={`${source.chunkId}-${index}`}
+            variant="secondary"
+            className="gap-1 font-normal"
+          >
             <FileText className="h-3 w-3" />
             {source.fileName}
             {source.pageNumber ? ` · p.${source.pageNumber}` : ""}
+            {` · ${formatVectorType(source.bestMatchType)}`}
             {` · ${source.score.toFixed(3)}`}
           </Badge>
         ))}
       </div>
       <div className="space-y-2">
         {sources.map((source, index) => (
-          <details key={source.chunkId} className="rounded-lg border border-border bg-muted/30 p-3">
+          <details
+            key={`${source.chunkId}-${index}`}
+            className="rounded-lg border border-border bg-muted/30 p-3"
+          >
             <summary className="cursor-pointer text-xs font-medium text-foreground">
               Source {index + 1}: {source.fileName}
               {source.pageNumber ? ` · page ${source.pageNumber}` : ""}
+              {` · ${formatVectorType(source.bestMatchType)} match`}
+              {` · ${source.score.toFixed(3)}`}
             </summary>
             <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
               {source.text}
             </p>
+            {source.matches && source.matches.length > 0 && (
+              <SourceMatches matches={source.matches} />
+            )}
           </details>
         ))}
       </div>
     </div>
   );
+}
+
+function SourceMatches({ matches }: Readonly<{ matches: SourceVectorMatch[] }>) {
+  return (
+    <div className="mt-3 space-y-2 border-t border-border pt-3">
+      <div className="text-xs font-medium text-foreground">Vector matches</div>
+      {matches.map((match) => (
+        <div key={match.vectorId} className="space-y-1">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <Badge variant="outline" className="font-normal">
+              {formatVectorType(match.vectorType)}
+            </Badge>
+            <span>{match.score.toFixed(3)}</span>
+          </div>
+          <p className="max-h-28 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+            {match.vectorText}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatVectorType(vectorType: SourceVectorType | undefined): string {
+  if (vectorType === "summary") {
+    return "summary";
+  }
+
+  if (vectorType === "question") {
+    return "question";
+  }
+
+  return "original";
 }
 
 function StreamingDots() {

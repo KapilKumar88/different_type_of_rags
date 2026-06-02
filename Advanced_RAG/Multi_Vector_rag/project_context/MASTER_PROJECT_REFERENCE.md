@@ -5,7 +5,7 @@ Read this file first in future sessions. It is the compact map of what exists no
 ## Read This First
 
 - `client/` is the React frontend. It has real auth flows, protected app routes, API-backed document upload/list/delete, and API-backed persisted RAG conversations with document scoping and SSE streaming.
-- `server/` is the NestJS backend. It has real auth plus a learning-focused Naive RAG backend with user-owned document ingestion, persisted conversation history, document-scoped Qdrant vector search, Ollama embeddings/LLM calls, SSE chat answering, and RAG abuse controls.
+- `server/` is the NestJS backend. It has real auth plus a learning-focused Multi-Vector RAG backend with user-owned document ingestion, persisted conversation history, document-scoped Qdrant vector search, Ollama embeddings/LLM calls, SSE chat answering, and RAG abuse controls.
 - Ignore generated/vendor output while reasoning about the app: `client/node_modules/`, `server/node_modules/`, `client/dist/`, `server/dist/`.
 - Detailed target guides live in:
   - `project_context/TECH-STACK.md`
@@ -26,7 +26,7 @@ Important files and folders:
 | `client/src/routes/app.tsx`                  | Authenticated app shell using sidebar, header, and nested outlet. Route access is protected by `client/src/guard/auth-guard.tsx`.                                                                                                                          |
 | `client/src/routes/login.tsx`                | Real sign-in form using Zod validation, `authService.login`, HttpOnly cookie session, Zustand auth state, and navigation to `/app/chat`.                                                                                                                   |
 | `client/src/routes/register.tsx`             | Real account creation form using Zod validation, `authService.register`, HttpOnly cookie session, Zustand auth state, and navigation to `/app/chat`.                                                                                                       |
-| `client/src/routes/app.chat.tsx`             | API-backed persisted Naive RAG conversation orchestration. Owns queries, mutations, active conversation state, SSE stream lifecycle, Stop/retry, and send flow; presentational chat UI is split into `client/src/components/chat/*`.                       |
+| `client/src/routes/app.chat.tsx`             | API-backed persisted RAG conversation orchestration. Owns queries, mutations, active conversation state, SSE stream lifecycle, Stop/retry, and send flow; presentational chat UI is split into `client/src/components/chat/*`.                              |
 | `client/src/routes/app.documents.tsx`        | API-backed documents table. Loads `/api/v1/documents`, memoizes local search/filter/count derivations, deletes with `DELETE /api/v1/documents/:id`, and refreshes after upload/delete.                                                                     |
 | `client/src/components/app/*`                | App header, sidebar, theme toggle, and real multipart upload dialog for `/api/v1/documents/upload`.                                                                                                                                                        |
 | `client/src/components/auth/auth-layout.tsx` | Shared auth page layout.                                                                                                                                                                                                                                   |
@@ -58,7 +58,7 @@ Client now has real auth/session handling, typed API services, TanStack Query pr
 
 ## Server Current Map
 
-Current stack: NestJS 11, TypeScript, Drizzle ORM, Postgres driver, Zod, JWT, cookie-parser, csrf-csrf, Helmet, bcryptjs, `@nestjs/throttler`, Qdrant JS client, LangChain Ollama integration, LangChain text splitters, pdf-parse, mammoth, and Multer. The backend has real auth and Naive RAG domain modules.
+Current stack: NestJS 11, TypeScript, Drizzle ORM, Postgres driver, Zod, JWT, cookie-parser, csrf-csrf, Helmet, bcryptjs, `@nestjs/throttler`, Qdrant JS client, LangChain Ollama integration, LangChain text splitters, pdf-parse, mammoth, and Multer. The backend has real auth and Multi-Vector RAG domain modules.
 
 Important files:
 
@@ -70,11 +70,12 @@ Important files:
 | `server/src/api/v1/csrf/*`                            | Public CSRF token endpoint for SPA double-submit token flow.                                                                                                                                                                                              |
 | `server/src/api/v1/documents/*`                       | Documents module with user-scoped upload/list/delete endpoints, upload validation, injectable parsing module, recursive chunking, embedding generation, Qdrant upsert/delete compensation, Postgres metadata repository, and focused tests.               |
 | `server/src/api/v1/chat/*`                            | Chat module with persisted conversations/messages, conversation document membership, scoped Qdrant retrieval, bounded prompt construction, SSE answer streaming, rename/scope/delete endpoints, and focused tests.                                        |
-| `server/src/services/qdrant/*`                        | Shared Qdrant module that ensures collection creation, upserts vector points, searches by selected document IDs, and deletes points by `documentId`.                                                                                                      |
+| `server/src/services/qdrant/*`                        | Shared Qdrant module that ensures collection creation, upserts vector points, searches by selected document IDs, maps multi-vector payload metadata, supports legacy Naive RAG payloads, and deletes points by `documentId`.                               |
 | `server/src/services/embeddings/*`                    | Shared Ollama embeddings module using `nomic-embed-text:v1.5` and validating vector size against config.                                                                                                                                                  |
 | `server/src/services/llm/*`                           | Shared Ollama chat module using configured local/cloud Ollama model for final answer generation.                                                                                                                                                          |
 | `server/src/services/parsing/*`                       | Shared document parsing module with parser classes for text-like files, PDF, and DOCX.                                                                                                                                                                    |
-| `server/src/services/rag-runtime/*`                   | In-process concurrency limiter for expensive RAG operations such as parsing, embeddings, Qdrant calls, and LLM streaming.                                                                                                                                 |
+| `server/src/services/multi-vector-rag/*`              | Shared Multi-Vector RAG services for LLM-generated chunk summaries/questions, multi-representation Qdrant indexing, query embedding, retrieval fan-out, MaxSim parent chunk fusion, and source debug metadata.                                             |
+| `server/src/services/rag-runtime/*`                   | In-process concurrency limiter for expensive RAG operations such as parsing, representation generation, embeddings, Qdrant calls, and LLM streaming.                                                                                                      |
 | `server/src/common/filters/http-exception.filter.ts`  | Standardizes Nest HTTP errors into `{ success, message, data }`.                                                                                                                                                                                          |
 | `server/src/common/security/csrf-protection.ts`       | Shared `csrf-csrf` double-submit cookie protection and token generation helpers.                                                                                                                                                                          |
 | `server/src/common/security/security-headers.ts`      | Shared Helmet setup for HTTP security headers, including `X-Frame-Options: DENY`.                                                                                                                                                                         |
@@ -92,7 +93,7 @@ Important files:
 | `server/drizzle.config.ts`                            | Drizzle Kit config for schemas and migrations.                                                                                                                                                                                                            |
 | `server/package.json`                                 | Nest scripts plus Drizzle migration scripts and auth/database dependencies.                                                                                                                                                                               |
 
-Server now has auth, users/documents/conversations table schemas, Drizzle database foundation, Zod validation, typed config, standardized HTTP error responses, cookie/JWT auth guards, document ingestion, upload hardening, Qdrant vector search, Ollama embeddings/LLM calls, persisted conversation history, document-scoped retrieval, SSE Naive RAG chat, RAG throttling/concurrency controls, prompt context boundaries, and safe SSE error mapping. Server still does not have Redis, BullMQ queues, Socket.io, LangGraph, hybrid search, reranking, or agentic memory.
+Server now has auth, users/documents/conversations table schemas, Drizzle database foundation, Zod validation, typed config, standardized HTTP error responses, cookie/JWT auth guards, document ingestion, upload hardening, Qdrant vector search, Ollama embeddings/LLM calls, persisted conversation history, document-scoped retrieval, SSE Multi-Vector RAG chat, RAG throttling/concurrency controls, prompt context boundaries, and safe SSE error mapping. Server still does not have Redis, BullMQ queues, Socket.io, LangGraph, hybrid search, reranking, or agentic memory.
 
 ## Auth Module Current State
 
@@ -118,7 +119,7 @@ Auth API response contracts:
 - Safe user shape is `{ id, name, email }`; `passwordHash` is never returned.
 - Auth session is an HttpOnly cookie named by `AUTH_COOKIE_NAME` (`rag_auth_token` by default).
 
-## Naive RAG Module Current State
+## Multi-Vector RAG Module Current State
 
 Implemented backend APIs are protected by the existing cookie JWT guard:
 
@@ -128,9 +129,12 @@ Implemented backend APIs are protected by the existing cookie JWT guard:
   - Requires an authenticated user; saved document metadata includes `userId`, and list/delete operations are user-scoped.
   - Enforces server-side file size, extension, MIME, content-signature, extracted-character, and chunk-count limits before expensive RAG writes.
   - Parses text through `DocumentParsingService`, which delegates to file-family parser classes for text-like files, PDF, and DOCX. The parser contract is text-only today but is the extension point for future PDF/DOCX table or image extraction.
-  - Splits parsed text with `RecursiveCharacterTextSplitter` using chunk size `800` and overlap `100`, embeds chunks with Ollama, stores one Qdrant point per chunk, then saves document metadata in Postgres.
+  - Splits parsed text with `RecursiveCharacterTextSplitter` using chunk size `800` and overlap `100`.
+  - For each parent chunk, generates one LLM summary and configured hypothetical questions, then indexes original text, summary, and question representations as separate Qdrant points.
+  - New upload indexing fails before Qdrant writes if representation generation cannot produce valid JSON after one retry.
   - If Postgres metadata creation fails after Qdrant upsert, the upload path compensates by deleting the just-created Qdrant points.
-  - Qdrant payload fields: `chunkId`, `documentId`, `fileName`, `text`, `pageNumber` when available, and `createdAt`.
+  - Qdrant payload fields: parent `chunkId`, `documentId`, `fileName`, parent `text`, `vectorId`, `vectorType` (`original`, `summary`, or `question`), `vectorText`, `pageNumber` when available, and `createdAt`.
+  - Existing legacy Naive RAG payloads without `vectorType`/`vectorText` remain searchable and are treated as `original` matches.
   - Success response: `{ success, message, data: { document } }`.
 - `GET /api/v1/documents`
   - Returns `{ success, message, data: { documents } }`.
@@ -154,7 +158,10 @@ Implemented backend APIs are protected by the existing cookie JWT guard:
   - Validates `{ content }`, confirms ownership, persists a user message, updates conversation `updatedAt`, and returns `{ message }`.
 - `GET /api/v1/chat/conversations/:conversationId/messages/:messageId/stream`
   - SSE endpoint for an owned persisted user message. Validates conversation ownership before message lookup, retrieves only selected conversation documents from Qdrant, emits `sources`, `token`, `done`, and `error` events, and persists the assistant message on completion.
+  - Retrieval embeds the user query once, searches all representation vectors with expanded limit `RAG_TOP_K * RAG_MULTI_VECTOR_SEARCH_MULTIPLIER`, fuses hits by parent chunk using MaxSim scoring, and returns top parent chunks.
+  - SSE `sources` keeps the existing source shape and adds optional `bestMatchType` plus `matches: { vectorId, vectorType, vectorText, score }[]` for debug display.
   - Prompt construction separates system rules from `<retrieved_context>`, `<conversation_history>`, and `<latest_user_message>`, treats retrieved/history text as untrusted content, and bounds context/history length.
+  - Final answer prompts include only parent chunk `text`, not generated summary/question `vectorText`.
   - Stream errors are stable public payloads with codes such as `not_found`, `bad_request`, and `stream_failed`; raw dependency errors are not emitted.
 RAG runtime config:
 
@@ -165,6 +172,9 @@ RAG runtime config:
 - `OLLAMA_EMBEDDING_MODEL`, default `nomic-embed-text:v1.5`
 - `OLLAMA_LLM_MODEL`, default `minimax-m2.5:cloud`
 - `RAG_TOP_K`, default `5`
+- `RAG_MULTI_VECTOR_QUESTIONS_PER_CHUNK`, default `3`
+- `RAG_MULTI_VECTOR_GENERATION_BATCH_SIZE`, default `8`
+- `RAG_MULTI_VECTOR_SEARCH_MULTIPLIER`, default `5`
 - `RAG_UPLOAD_RATE_LIMIT_TTL_MS`, default `60000`
 - `RAG_UPLOAD_RATE_LIMIT_LIMIT`, default `5`
 - `RAG_CHAT_RATE_LIMIT_TTL_MS`, default `60000`
@@ -173,17 +183,18 @@ RAG runtime config:
 - `RAG_STREAM_RATE_LIMIT_LIMIT`, default `10`
 - `RAG_RUNTIME_CONCURRENCY_LIMIT`, default `4`
 
-Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and queues. It now includes persisted conversation history, SSE token streaming, upload/chat/stream throttles, in-process concurrency limits, and prompt-boundary safeguards, but not agentic memory outside the stored conversation messages.
+Multi-Vector RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and queues. It now includes persisted conversation history, SSE token streaming, upload/chat/stream throttles, in-process concurrency limits, representation generation, multi-representation vector retrieval, and prompt-boundary safeguards, but not agentic memory outside the stored conversation messages.
 
 ## Current Gaps / Do Not Assume
 
 - `TECH-STACK.md` and the architecture guides are the target direction, not proof that the feature exists.
 - Re-indexing, profile changes, and password reset APIs are not implemented.
 - Documents and chat now call real backend APIs.
-- Chat conversation history and selected document scope are persisted in Postgres; vector chunks remain in Qdrant.
+- Chat conversation history and selected document scope are persisted in Postgres; parent chunks and representation vectors remain in Qdrant.
 - Legacy `POST /api/v1/chat/ask` was removed because it searched globally. Use persisted conversations plus selected document scope.
 - Local runtime requires reachable Postgres, Qdrant, and Ollama services. Migrations must be applied before document metadata can persist.
 - Ollama must have the embedding model and chat model available: `nomic-embed-text:v1.5` and `minimax-m2.5:cloud`.
+  The chat model is also used during upload to generate multi-vector summaries/questions.
 
 ## Pitfalls & Lessons Learned
 
@@ -205,6 +216,8 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
 - Shared RAG infrastructure lives under `server/src/services/*`, not under `server/src/api/v1/*`. Keep API modules focused on HTTP/domain orchestration.
 - Do not reintroduce unscoped vector search or a global ask endpoint. Retrieval must stay scoped through owned conversations and their selected document IDs.
 - Uploaded document text and conversation history are untrusted prompt data. Keep prompt boundaries and budgets in place when changing answer generation.
+- Generated multi-vector `summary` and `question` text is retrieval/debug metadata. Do not include `vectorText` in the final answer prompt; use parent chunk `text` only.
+- Old Naive RAG documents remain searchable as original-style matches, but they will not have summary/question vectors unless deleted and uploaded again or a future reindex flow is added.
 - SSE streaming should validate conversation ownership before message lookup and should emit stable public errors, not raw exception messages.
 - Server TypeScript now enables `noImplicitAny`, `strictBindCallApply`, and `noFallthroughCasesInSwitch`; keep new backend code compatible with those checks.
 - `server/.env`, `server/dist/`, and `server/node_modules/` are intentionally ignored. Do not stage generated/runtime output.
@@ -247,3 +260,4 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
   - `git ls-files Naive_RAG/server/.env Naive_RAG/server/dist Naive_RAG/server/node_modules` returned no tracked runtime/generated paths.
   - `git check-ignore -v Naive_RAG/server/.env Naive_RAG/server/dist Naive_RAG/server/node_modules` confirmed ignore coverage from `server/.gitignore`.
 - App scope cleanup verification: `npm run lint` and `npm run build` from `client/` passed; `npm run build`, `npm test -- --runInBand`, and `npm run test:e2e -- auth.e2e-spec.ts --runInBand` from `server/` passed. Auth e2e required local-bind permission for Supertest.
+- Multi-Vector RAG verification: `npm test -- --runTestsByPath src/services/multi-vector-rag/multi-vector-representation.service.spec.ts src/services/multi-vector-rag/multi-vector-indexing.service.spec.ts src/services/multi-vector-rag/multi-vector-retrieval.service.spec.ts src/services/qdrant/qdrant.service.spec.ts src/api/v1/documents/documents.service.spec.ts src/api/v1/chat/chat.service.spec.ts src/config/env.spec.ts --runInBand` from `server/` passed; `npm test -- --runInBand` from `server/` passed; `npm run build` from `server/` passed; `npm run lint` from `client/` passed with existing Fast Refresh warnings only; `npm run build` from `client/` passed. Manual runtime smoke was not run because Postgres, Qdrant, and Ollama service availability is environment-dependent.

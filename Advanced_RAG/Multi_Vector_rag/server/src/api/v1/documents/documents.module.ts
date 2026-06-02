@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { EmbeddingsModule } from '../../../services/embeddings/embeddings.module';
+import { MultiVectorRagModule } from '../../../services/multi-vector-rag/multi-vector-rag.module';
 import { QdrantModule } from '../../../services/qdrant/qdrant.module';
 import { RagRuntimeModule } from '../../../services/rag-runtime/rag-runtime.module';
 import { DocumentsController } from './documents.controller';
@@ -10,8 +10,8 @@ import { DocumentUploadValidationPipe } from './pipes/document-upload-validation
 
 @Module({
   imports: [
-    EmbeddingsModule,
     QdrantModule,
+    MultiVectorRagModule,
     DocumentParsingModule,
     RagRuntimeModule,
   ],

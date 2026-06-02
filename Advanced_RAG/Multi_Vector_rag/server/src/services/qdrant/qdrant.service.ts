@@ -4,7 +4,9 @@ import type { Schemas } from '@qdrant/js-client-rest';
 import { qdrantConfig } from '../../config/qdrant.config';
 import type {
   ChunkPayload,
+  RagVectorType,
   RetrievedChunk,
+  RetrievedVectorMatch,
   VectorPoint,
 } from '../../types/rag.types';
 
@@ -109,6 +111,9 @@ export class QdrantService {
       documentId: payload.documentId,
       fileName: payload.fileName,
       text: payload.text,
+      vectorId: payload.vectorId ?? null,
+      vectorType: payload.vectorType ?? null,
+      vectorText: payload.vectorText ?? null,
       pageNumber: payload.pageNumber ?? null,
       createdAt: payload.createdAt,
     };
@@ -132,13 +137,27 @@ export class QdrantService {
     }
 
     const pageNumber = this.getNumber(payload.pageNumber);
+    const vectorType = this.getVectorType(payload.vectorType);
+    const vectorText = this.getString(payload.vectorText) ?? text;
+    const vectorId = this.getString(payload.vectorId) ?? chunkId;
+    const match: RetrievedVectorMatch = {
+      vectorId,
+      vectorType,
+      vectorText,
+      score: point.score,
+    };
     const chunk: RetrievedChunk = {
       chunkId,
       documentId,
       fileName,
       text,
+      vectorId,
+      vectorType,
+      vectorText,
       createdAt,
       score: point.score,
+      bestMatchType: vectorType,
+      matches: [match],
     };
 
     if (pageNumber !== undefined) {
@@ -162,5 +181,17 @@ export class QdrantService {
     }
 
     return value;
+  }
+
+  private getVectorType(value: unknown): RagVectorType {
+    if (
+      value === 'original' ||
+      value === 'summary' ||
+      value === 'question'
+    ) {
+      return value;
+    }
+
+    return 'original';
   }
 }

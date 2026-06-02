@@ -36,6 +36,21 @@ const envSchema = z
     OLLAMA_EMBEDDING_MODEL: z.string().min(1).default('nomic-embed-text:v1.5'),
     OLLAMA_LLM_MODEL: z.string().min(1).default('minimax-m2.5:cloud'),
     RAG_TOP_K: z.coerce.number().int().positive().default(5),
+    RAG_MULTI_VECTOR_QUESTIONS_PER_CHUNK: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(3),
+    RAG_MULTI_VECTOR_GENERATION_BATCH_SIZE: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(8),
+    RAG_MULTI_VECTOR_SEARCH_MULTIPLIER: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(5),
     RAG_UPLOAD_RATE_LIMIT_TTL_MS: z.coerce
       .number()
       .int()

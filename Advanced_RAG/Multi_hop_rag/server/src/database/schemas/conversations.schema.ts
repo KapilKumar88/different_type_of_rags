@@ -7,9 +7,13 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import type { RetrievedChunk } from '../../types/rag.types';
+import type { MultiHopStep, RetrievedChunk } from '../../types/rag.types';
 import { documents } from './documents.schema';
 import { users } from './users.schema';
+
+export type MessageMetadata = {
+  hops?: MultiHopStep[];
+};
 
 export type ConversationMessageRole = 'user' | 'assistant';
 
@@ -57,6 +61,7 @@ export const conversationMessages = pgTable('conversation_messages', {
     .notNull(),
   content: text('content').notNull(),
   sources: jsonb('sources').$type<RetrievedChunk[] | null>(),
+  metadata: jsonb('metadata').$type<MessageMetadata | null>(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

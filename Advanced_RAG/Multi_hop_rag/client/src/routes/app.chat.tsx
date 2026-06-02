@@ -417,6 +417,15 @@ export function ChatPage() {
           current.map((message) => (message.id === pendingId ? { ...message, sources } : message)),
         );
       },
+      onHops: ({ hops }) => {
+        if (activeStreamIdRef.current !== streamId) {
+          return;
+        }
+
+        setMessages((current) =>
+          current.map((message) => (message.id === pendingId ? { ...message, hops } : message)),
+        );
+      },
       onToken: ({ token }) => {
         if (activeStreamIdRef.current !== streamId) {
           return;
@@ -680,7 +689,9 @@ export function ChatPage() {
               <div className="flex items-center justify-between gap-2 px-1">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Sparkles className="h-3 w-3" />
-                  {activeConversationId ? "Scoped RAG · top 5 chunks" : "Select documents to chat"}
+                  {activeConversationId
+                    ? "Multi-Hop RAG · up to 8 context chunks"
+                    : "Select documents to chat"}
                 </div>
                 <Button
                   size="sm"

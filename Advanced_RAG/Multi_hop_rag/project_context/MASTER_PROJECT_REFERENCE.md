@@ -175,6 +175,32 @@ RAG runtime config:
 
 Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and queues. It now includes persisted conversation history, SSE token streaming, upload/chat/stream throttles, in-process concurrency limits, and prompt-boundary safeguards, but not agentic memory outside the stored conversation messages.
 
+## Multi-Hop RAG Module Current State
+
+Multi-Hop RAG upgrades the retrieval step in `ChatService` from single-shot embed+search to an iterative, decomposition-driven pipeline.
+
+Architecture:
+
+- `server/src/services/rag-runtime/multi-hop-retriever.service.ts` — new orchestrator. Decomposes the question into sub-questions via LLM, runs sequential hops (embed + Qdrant search) deduplicated by `chunkId`, generates follow-up queries from intermediate evidence, stops on `DONE` / max-hops / zero-new-chunks, and returns score-sorted, capped `{ sources, hops }`.
+- `ChatService.retrieveForConversation` replaces the old `retrieveConversationSources`. When `ragConfig.multiHop.enabled` is true it delegates to `MultiHopRetrieverService`; when false it falls back to the original single-hop embed+search path.
+- `conversation_messages` has a new nullable `metadata jsonb` column (migration `0004_fast_spectrum.sql`) typed `{ hops?: MultiHopStep[] }`.
+- The SSE stream now emits a `hops` event immediately after `sources`. Both assistant messages and fallback messages persist `metadata: { hops }`.
+- The synthesis prompt adds a `<research_steps>` block listing hop queries (treated as untrusted content).
+- `client/src/components/chat/message-display.tsx` renders a collapsible `ReasoningTrace` panel above `SourceChunks` for assistant messages that carry hops.
+- `toChatMessage` in `chat.helpers.ts` maps `message.metadata?.hops` to the `ChatMessage.hops` field so reloaded conversations also show the trace.
+
+New config (all in `ragConfig.multiHop`, env vars with defaults):
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `RAG_MULTI_HOP_ENABLED` | `true` | Toggle; set `false` to degrade to single-hop |
+| `RAG_MULTI_HOP_MAX_HOPS` | `4` | Maximum retrieval iterations |
+| `RAG_MULTI_HOP_MAX_SUBQUESTIONS` | `3` | Max sub-questions from decomposition |
+| `RAG_MULTI_HOP_PER_HOP_TOP_K` | `4` | Qdrant results per hop |
+| `RAG_MULTI_HOP_MAX_CONTEXT_CHUNKS` | `8` | Final source cap fed to the LLM |
+
+New SSE event: `hops` — emitted after `sources`, carries `{ hops: MultiHopStep[] }`. Emitted even when multi-hop is disabled (empty array) so clients never need to special-case its absence.
+
 ## Current Gaps / Do Not Assume
 
 - `TECH-STACK.md` and the architecture guides are the target direction, not proof that the feature exists.
@@ -187,6 +213,12 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
 
 ## Pitfalls & Lessons Learned
 
+- Multi-hop decomposition and follow-up prompts must label their data as untrusted content, not instructions — mirrors the guardrails already in `chat.service.ts` prompt template.
+- Multi-hop decomposition always falls back to `[question]` on parse failure or empty result, so the feature never regresses below naive single-hop retrieval.
+- The `hops` SSE event is always emitted (empty array when disabled or when retrieval finds nothing) so client code never needs to branch on its absence.
+- `MultiHopRetrieverService` is provided directly in `ChatModule`, not in `RagRuntimeModule`, to keep the shared runtime module dependency-free.
+- When `RAG_MULTI_HOP_ENABLED=false`, `embeddingsService` and `qdrantService` are still injected into `ChatService` for the single-hop fallback path; do not remove those dependencies.
+- The `conversation_messages.metadata` column is nullable. User messages always have `metadata: null`. Only assistant messages carry `{ hops }`.
 - Keep current implementation and planned architecture explicitly separated in docs and code reviews.
 - Future env work should extend typed config first. Avoid direct `process.env` or `import.meta.env` access in feature code.
 - `DATABASE_URL` is required by server config and has no application-source default. Local development must provide it through server `.env` or the process environment; tests set explicit values through Jest setup.

@@ -8,7 +8,21 @@ export type SourceChunk = {
   createdAt: string;
 };
 
+export type MultiHopStepKind = "sub-question" | "follow-up";
+
+export type MultiHopStep = {
+  hopNumber: number;
+  kind: MultiHopStepKind;
+  query: string;
+  retrievedChunkIds: string[];
+  newChunkCount: number;
+};
+
 export type ConversationMessageRole = "user" | "assistant";
+
+export type MessageMetadata = {
+  hops?: MultiHopStep[];
+};
 
 export type ConversationMessage = {
   id: string;
@@ -16,6 +30,7 @@ export type ConversationMessage = {
   role: ConversationMessageRole;
   content: string;
   sources: SourceChunk[] | null;
+  metadata?: MessageMetadata | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -110,6 +125,10 @@ export type SourcesStreamEvent = {
   sources: SourceChunk[];
 };
 
+export type HopsStreamEvent = {
+  hops: MultiHopStep[];
+};
+
 export type TokenStreamEvent = {
   token: string;
 };
@@ -125,6 +144,7 @@ export type ErrorStreamEvent = {
 
 export type ChatStreamHandlers = {
   onSources?: (event: SourcesStreamEvent) => void;
+  onHops?: (event: HopsStreamEvent) => void;
   onToken?: (event: TokenStreamEvent) => void;
   onDone?: (event: DoneStreamEvent) => void;
   onError?: (event: ErrorStreamEvent) => void;

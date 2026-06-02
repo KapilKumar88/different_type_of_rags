@@ -12,6 +12,7 @@ import type {
   DeleteConversationResponse,
   DoneStreamEvent,
   ErrorStreamEvent,
+  HopsStreamEvent,
   SourcesStreamEvent,
   TokenStreamEvent,
   UpdateConversationDocumentsPayload,
@@ -100,6 +101,10 @@ export const chatService = {
 
     eventSource.addEventListener("sources", (event) => {
       handlers.onSources?.(parseStreamEvent<SourcesStreamEvent>(event));
+    });
+
+    eventSource.addEventListener("hops", (event) => {
+      handlers.onHops?.(parseStreamEvent<HopsStreamEvent>(event));
     });
 
     eventSource.addEventListener("token", (event) => {

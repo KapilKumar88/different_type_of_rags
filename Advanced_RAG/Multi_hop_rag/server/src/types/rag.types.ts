@@ -16,3 +16,18 @@ export type VectorPoint = {
 export type RetrievedChunk = ChunkPayload & {
   score: number;
 };
+
+export type MultiHopStepKind = 'sub-question' | 'follow-up';
+
+export type MultiHopStep = {
+  hopNumber: number;
+  kind: MultiHopStepKind;
+  query: string;
+  retrievedChunkIds: string[];
+  newChunkCount: number;
+};
+
+export type MultiHopResult = {
+  sources: RetrievedChunk[];
+  hops: MultiHopStep[];
+};

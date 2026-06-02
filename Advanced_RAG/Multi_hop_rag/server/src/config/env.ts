@@ -59,6 +59,11 @@ const envSchema = z
       .int()
       .positive()
       .default(4),
+    RAG_MULTI_HOP_ENABLED: z.coerce.boolean().default(true),
+    RAG_MULTI_HOP_MAX_HOPS: z.coerce.number().int().positive().default(4),
+    RAG_MULTI_HOP_MAX_SUBQUESTIONS: z.coerce.number().int().positive().default(3),
+    RAG_MULTI_HOP_PER_HOP_TOP_K: z.coerce.number().int().positive().default(4),
+    RAG_MULTI_HOP_MAX_CONTEXT_CHUNKS: z.coerce.number().int().positive().default(8),
   })
   .superRefine((env, context) => {
     if (env.NODE_ENV !== 'production') {

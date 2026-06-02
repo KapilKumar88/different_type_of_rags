@@ -3,6 +3,7 @@ import { DocumentsModule } from '../documents/documents.module';
 import { EmbeddingsModule } from '../../../services/embeddings/embeddings.module';
 import { LlmModule } from '../../../services/llm/llm.module';
 import { QdrantModule } from '../../../services/qdrant/qdrant.module';
+import { MultiHopRetrieverService } from '../../../services/rag-runtime/multi-hop-retriever.service';
 import { RagRuntimeModule } from '../../../services/rag-runtime/rag-runtime.module';
 import { ChatController } from './chat.controller';
 import { ChatRepository } from './chat.repository';
@@ -17,6 +18,6 @@ import { ChatService } from './chat.service';
     RagRuntimeModule,
   ],
   controllers: [ChatController],
-  providers: [ChatService, ChatRepository],
+  providers: [ChatService, ChatRepository, MultiHopRetrieverService],
 })
 export class ChatModule {}

@@ -5,7 +5,7 @@ Read this file first in future sessions. It is the compact map of what exists no
 ## Read This First
 
 - `client/` is the React frontend. It has real auth flows, protected app routes, API-backed document upload/list/delete, and API-backed persisted RAG conversations with document scoping and SSE streaming.
-- `server/` is the NestJS backend. It has real auth plus a learning-focused Naive RAG backend with user-owned document ingestion, persisted conversation history, document-scoped Qdrant vector search, Ollama embeddings/LLM calls, SSE chat answering, and RAG abuse controls.
+- `server/` is the NestJS backend. It has real auth plus a learning-focused Adaptive RAG backend with user-owned document ingestion, persisted conversation history, document-scoped Qdrant vector search, Ollama embeddings/LLM calls, adaptive routing/grading/rewrite/validation, SSE chat answering, and RAG abuse controls.
 - Ignore generated/vendor output while reasoning about the app: `client/node_modules/`, `server/node_modules/`, `client/dist/`, `server/dist/`.
 - Detailed target guides live in:
   - `project_context/TECH-STACK.md`
@@ -26,7 +26,7 @@ Important files and folders:
 | `client/src/routes/app.tsx`                  | Authenticated app shell using sidebar, header, and nested outlet. Route access is protected by `client/src/guard/auth-guard.tsx`.                                                                                                                          |
 | `client/src/routes/login.tsx`                | Real sign-in form using Zod validation, `authService.login`, HttpOnly cookie session, Zustand auth state, and navigation to `/app/chat`.                                                                                                                   |
 | `client/src/routes/register.tsx`             | Real account creation form using Zod validation, `authService.register`, HttpOnly cookie session, Zustand auth state, and navigation to `/app/chat`.                                                                                                       |
-| `client/src/routes/app.chat.tsx`             | API-backed persisted Naive RAG conversation orchestration. Owns queries, mutations, active conversation state, SSE stream lifecycle, Stop/retry, and send flow; presentational chat UI is split into `client/src/components/chat/*`.                       |
+| `client/src/routes/app.chat.tsx`             | API-backed persisted Adaptive RAG conversation orchestration. Owns queries, mutations, active conversation state, SSE stream lifecycle, adaptive trace updates, Stop/retry, and send flow; presentational chat UI is split into `client/src/components/chat/*`. |
 | `client/src/routes/app.documents.tsx`        | API-backed documents table. Loads `/api/v1/documents`, memoizes local search/filter/count derivations, deletes with `DELETE /api/v1/documents/:id`, and refreshes after upload/delete.                                                                     |
 | `client/src/components/app/*`                | App header, sidebar, theme toggle, and real multipart upload dialog for `/api/v1/documents/upload`.                                                                                                                                                        |
 | `client/src/components/auth/auth-layout.tsx` | Shared auth page layout.                                                                                                                                                                                                                                   |
@@ -41,11 +41,11 @@ Important files and folders:
 | `client/src/lib/utils.ts`                    | `cn()` class-name merge helper.                                                                                                                                                                                                                            |
 | `client/src/services/auth.service.ts`        | Auth API service for `register`, `login`, `logout`, and `me`.                                                                                                                                                                                              |
 | `client/src/services/documents.service.ts`   | Documents API service for list, multipart upload, and delete.                                                                                                                                                                                              |
-| `client/src/services/chat.service.ts`        | Chat API service for conversation CRUD/update-scope operations, message creation, and SSE message streaming.                                                                                                                                               |
+| `client/src/services/chat.service.ts`        | Chat API service for conversation CRUD/update-scope operations, message creation, and SSE message streaming, including `adaptive_trace` stream events.                                                                                                      |
 | `client/src/store/auth.store.ts`             | Zustand auth store with `unknown`, `authenticated`, and `unauthenticated` states.                                                                                                                                                                          |
 | `client/src/types/auth.types.ts`             | Shared auth payload, response, user, and status types.                                                                                                                                                                                                     |
 | `client/src/types/document.types.ts`         | Document metadata response types used by the documents page and upload dialog.                                                                                                                                                                             |
-| `client/src/types/chat.types.ts`             | Chat answer, conversation, message, stream event, and retrieved source chunk response types.                                                                                                                                                               |
+| `client/src/types/chat.types.ts`             | Chat answer, conversation, message, stream event, retrieved source chunk, and adaptive trace response types.                                                                                                                                                |
 | `client/src/validations/auth.validation.ts`  | Zod schemas for login and registration forms.                                                                                                                                                                                                              |
 | `client/src/hooks/use-page-meta.ts`          | Sets `document.title` for pages.                                                                                                                                                                                                                           |
 | `client/src/hooks/use-mobile.tsx`            | Mobile breakpoint helper.                                                                                                                                                                                                                                  |
@@ -54,11 +54,11 @@ Important files and folders:
 | `client/public/_headers`                     | Cloudflare-compatible static security headers and immutable cache headers for hashed assets.                                                                                                                                                               |
 | `client/components.json`                     | shadcn configuration and aliases.                                                                                                                                                                                                                          |
 
-Client now has real auth/session handling, typed API services, TanStack Query provider, Zustand auth store, guarded auth/app routes, route-level lazy loading, named Vite vendor chunks, API-backed document management, and API-backed persisted RAG conversations. Chat supports header-upload document cache refresh, descriptive generated titles, inline rename, editable document scope, hard delete, streamed responses with Stop and retry-on-network-error, message timestamps, loading skeletons, buffered token rendering, and split presentational components.
+Client now has real auth/session handling, typed API services, TanStack Query provider, Zustand auth store, guarded auth/app routes, route-level lazy loading, named Vite vendor chunks, API-backed document management, and API-backed persisted Adaptive RAG conversations. Chat supports header-upload document cache refresh, descriptive generated titles, inline rename, editable document scope, hard delete, streamed responses with Stop and retry-on-network-error, adaptive trace display, message timestamps, loading skeletons, buffered token rendering, and split presentational components.
 
 ## Server Current Map
 
-Current stack: NestJS 11, TypeScript, Drizzle ORM, Postgres driver, Zod, JWT, cookie-parser, csrf-csrf, Helmet, bcryptjs, `@nestjs/throttler`, Qdrant JS client, LangChain Ollama integration, LangChain text splitters, pdf-parse, mammoth, and Multer. The backend has real auth and Naive RAG domain modules.
+Current stack: NestJS 11, TypeScript, Drizzle ORM, Postgres driver, Zod, JWT, cookie-parser, csrf-csrf, Helmet, bcryptjs, `@nestjs/throttler`, Qdrant JS client, LangChain Ollama integration, LangChain text splitters, pdf-parse, mammoth, and Multer. The backend has real auth and Adaptive RAG domain modules.
 
 Important files:
 
@@ -69,7 +69,8 @@ Important files:
 | `server/src/api/v1/auth/*`                            | Auth module with register, login, logout, and current-user endpoints, plus controller/service/repository layering, throttling, and tests.                                                                                                                 |
 | `server/src/api/v1/csrf/*`                            | Public CSRF token endpoint for SPA double-submit token flow.                                                                                                                                                                                              |
 | `server/src/api/v1/documents/*`                       | Documents module with user-scoped upload/list/delete endpoints, upload validation, injectable parsing module, recursive chunking, embedding generation, Qdrant upsert/delete compensation, Postgres metadata repository, and focused tests.               |
-| `server/src/api/v1/chat/*`                            | Chat module with persisted conversations/messages, conversation document membership, scoped Qdrant retrieval, bounded prompt construction, SSE answer streaming, rename/scope/delete endpoints, and focused tests.                                        |
+| `server/src/api/v1/chat/*`                            | Chat module with persisted conversations/messages, conversation document membership, Adaptive RAG delegation, SSE answer streaming, rename/scope/delete endpoints, and focused tests.                                                                      |
+| `server/src/services/adaptive-rag/*`                  | Shared Adaptive RAG runtime with conservative routing, selected-document scoped retrieval retry, source grading, query rewriting, grounded answer generation, answer validation, compact trace creation, prompt helpers, parser helpers, and focused tests. |
 | `server/src/services/qdrant/*`                        | Shared Qdrant module that ensures collection creation, upserts vector points, searches by selected document IDs, and deletes points by `documentId`.                                                                                                      |
 | `server/src/services/embeddings/*`                    | Shared Ollama embeddings module using `nomic-embed-text:v1.5` and validating vector size against config.                                                                                                                                                  |
 | `server/src/services/llm/*`                           | Shared Ollama chat module using configured local/cloud Ollama model for final answer generation.                                                                                                                                                          |
@@ -82,7 +83,7 @@ Important files:
 | `server/src/config/*`                                 | Typed config modules for app, database, JWT, cookies, auth rate limits, CSRF, Qdrant, Ollama, RAG settings, and environment parsing. `env.ts` loads server `.env` values before Zod validation while preserving real environment variable precedence.     |
 | `server/src/database/schemas/users.schema.ts`         | Drizzle users table schema with unique email constraint and password hash.                                                                                                                                                                                |
 | `server/src/database/schemas/documents.schema.ts`     | Drizzle user-owned documents metadata table schema. Chunk text and vectors are stored in Qdrant payloads, not Postgres.                                                                                                                                   |
-| `server/src/database/schemas/conversations.schema.ts` | Drizzle conversations, conversation-document join table, and conversation message schema with cascade cleanup.                                                                                                                                            |
+| `server/src/database/schemas/conversations.schema.ts` | Drizzle conversations, conversation-document join table, and conversation message schema with cascade cleanup, retrieved sources, and nullable adaptive trace JSONB metadata.                                                                              |
 | `server/src/database/migrations/*`                    | Drizzle migrations for users and documents metadata tables.                                                                                                                                                                                               |
 | `server/src/guard/*`                                  | Global JWT auth guard, `@Public()`, `@CurrentUser()`, and authenticated request typing.                                                                                                                                                                   |
 | `server/src/services/database/*`                      | Global Drizzle database module/service backed by Postgres.                                                                                                                                                                                                |
@@ -92,7 +93,7 @@ Important files:
 | `server/drizzle.config.ts`                            | Drizzle Kit config for schemas and migrations.                                                                                                                                                                                                            |
 | `server/package.json`                                 | Nest scripts plus Drizzle migration scripts and auth/database dependencies.                                                                                                                                                                               |
 
-Server now has auth, users/documents/conversations table schemas, Drizzle database foundation, Zod validation, typed config, standardized HTTP error responses, cookie/JWT auth guards, document ingestion, upload hardening, Qdrant vector search, Ollama embeddings/LLM calls, persisted conversation history, document-scoped retrieval, SSE Naive RAG chat, RAG throttling/concurrency controls, prompt context boundaries, and safe SSE error mapping. Server still does not have Redis, BullMQ queues, Socket.io, LangGraph, hybrid search, reranking, or agentic memory.
+Server now has auth, users/documents/conversations table schemas, Drizzle database foundation, Zod validation, typed config, standardized HTTP error responses, cookie/JWT auth guards, document ingestion, upload hardening, Qdrant vector search, Ollama embeddings/LLM calls, persisted conversation history, document-scoped Adaptive RAG retrieval, SSE Adaptive RAG chat, adaptive trace persistence, RAG throttling/concurrency controls, prompt context boundaries, and safe SSE error mapping. Server still does not have Redis, BullMQ queues, Socket.io, LangGraph, hybrid search, external web retrieval, or agentic memory.
 
 ## Auth Module Current State
 
@@ -118,7 +119,7 @@ Auth API response contracts:
 - Safe user shape is `{ id, name, email }`; `passwordHash` is never returned.
 - Auth session is an HttpOnly cookie named by `AUTH_COOKIE_NAME` (`rag_auth_token` by default).
 
-## Naive RAG Module Current State
+## Adaptive RAG Module Current State
 
 Implemented backend APIs are protected by the existing cookie JWT guard:
 
@@ -153,9 +154,11 @@ Implemented backend APIs are protected by the existing cookie JWT guard:
 - `POST /api/v1/chat/conversations/:conversationId/messages`
   - Validates `{ content }`, confirms ownership, persists a user message, updates conversation `updatedAt`, and returns `{ message }`.
 - `GET /api/v1/chat/conversations/:conversationId/messages/:messageId/stream`
-  - SSE endpoint for an owned persisted user message. Validates conversation ownership before message lookup, retrieves only selected conversation documents from Qdrant, emits `sources`, `token`, `done`, and `error` events, and persists the assistant message on completion.
-  - Prompt construction separates system rules from `<retrieved_context>`, `<conversation_history>`, and `<latest_user_message>`, treats retrieved/history text as untrusted content, and bounds context/history length.
+  - SSE endpoint for an owned persisted user message. Validates conversation ownership before message lookup, delegates answering to `AdaptiveRagService`, emits `sources`, `adaptive_trace`, `token`, `done`, and `error` events, and persists the assistant message on completion.
+  - Adaptive runtime conservatively routes questions, defaults to document retrieval for document/follow-up questions, retrieves only selected conversation documents from Qdrant, filters weak scores, grades retrieved chunks for relevance, rewrites the query and retries scoped retrieval when context is weak, generates an answer from relevant chunks only, validates grounding/usefulness, and falls back to the canonical document-not-found answer when checks fail.
+  - Prompt construction in the adaptive runtime separates retrieved context, conversation history, and latest user message; treats retrieved/history text as untrusted content; bounds context/history length; and defensively parses LLM JSON grader/planner outputs.
   - Stream errors are stable public payloads with codes such as `not_found`, `bad_request`, and `stream_failed`; raw dependency errors are not emitted.
+  - Assistant messages can persist nullable `adaptiveTrace` metadata alongside `sources`; the client displays a compact trace panel with route, rewrite, retrieval attempts, relevant chunk counts, answer validation, and fallback reason.
 RAG runtime config:
 
 - `QDRANT_URL`, default `http://localhost:6333`
@@ -172,8 +175,12 @@ RAG runtime config:
 - `RAG_STREAM_RATE_LIMIT_TTL_MS`, default `60000`
 - `RAG_STREAM_RATE_LIMIT_LIMIT`, default `10`
 - `RAG_RUNTIME_CONCURRENCY_LIMIT`, default `4`
+- `ADAPTIVE_RAG_MAX_RETRIEVAL_ATTEMPTS`, default `2`
+- `ADAPTIVE_RAG_MIN_SOURCE_SCORE`, default `0.2`
+- `ADAPTIVE_RAG_MAX_GRADED_SOURCES`, default `5` and capped by `RAG_TOP_K`
+- `ADAPTIVE_RAG_MAX_ANSWER_ATTEMPTS`, default `2`
 
-Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and queues. It now includes persisted conversation history, SSE token streaming, upload/chat/stream throttles, in-process concurrency limits, and prompt-boundary safeguards, but not agentic memory outside the stored conversation messages.
+Adaptive RAG intentionally excludes LangGraph, external agents, hybrid search, web search, reranking models, and queues. It now includes persisted conversation history, SSE token streaming, upload/chat/stream throttles, in-process concurrency limits, prompt-boundary safeguards, adaptive routing/grading/rewrite/validation, and compact trace metadata, but not agentic memory outside the stored conversation messages.
 
 ## Current Gaps / Do Not Assume
 
@@ -184,6 +191,7 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
 - Legacy `POST /api/v1/chat/ask` was removed because it searched globally. Use persisted conversations plus selected document scope.
 - Local runtime requires reachable Postgres, Qdrant, and Ollama services. Migrations must be applied before document metadata can persist.
 - Ollama must have the embedding model and chat model available: `nomic-embed-text:v1.5` and `minimax-m2.5:cloud`.
+- Adaptive RAG planner/grader/rewrite/answer validation calls use the configured Ollama LLM model; automated tests mock these calls and do not prove local model availability.
 
 ## Pitfalls & Lessons Learned
 
@@ -205,6 +213,8 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
 - Shared RAG infrastructure lives under `server/src/services/*`, not under `server/src/api/v1/*`. Keep API modules focused on HTTP/domain orchestration.
 - Do not reintroduce unscoped vector search or a global ask endpoint. Retrieval must stay scoped through owned conversations and their selected document IDs.
 - Uploaded document text and conversation history are untrusted prompt data. Keep prompt boundaries and budgets in place when changing answer generation.
+- Adaptive trace is intentionally compact metadata. Do not persist raw prompts, hidden reasoning, raw provider errors, or long diagnostic payloads in `adaptiveTrace`.
+- LLM JSON outputs for routing, source grading, query rewriting, and answer validation are untrusted. Parse defensively and prefer conservative fallback behavior when parsing fails.
 - SSE streaming should validate conversation ownership before message lookup and should emit stable public errors, not raw exception messages.
 - Server TypeScript now enables `noImplicitAny`, `strictBindCallApply`, and `noFallthroughCasesInSwitch`; keep new backend code compatible with those checks.
 - `server/.env`, `server/dist/`, and `server/node_modules/` are intentionally ignored. Do not stage generated/runtime output.
@@ -219,6 +229,7 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
 - `npm audit --audit-level=high` has no high/critical client findings as of the client production optimization work. The remaining moderate `ws` advisory is in the Cloudflare/miniflare/wrangler toolchain; npm only offers a breaking forced fix that downgrades `@cloudflare/vite-plugin` to `0.1.1`, so it is deferred.
 - Conversation deletion is hard delete only. Do not assume archive/soft-delete behavior exists unless a future schema change adds it.
 - SSE retry is client-side and retries the same persisted user message ID. It avoids duplicate user messages, but a server-side stream that already completed and persisted an assistant response before the network error may still require future idempotency safeguards.
+- The chat SSE contract now includes `adaptive_trace` before token streaming. Clients that ignore unknown SSE event names still receive `sources`, `token`, and `done`; trace-aware clients render the metadata panel.
 - Update this file after significant architecture decisions, new modules, API contracts, or development pitfalls so future sessions do not re-discover the same context.
 
 ## Quick Verification Snapshot
@@ -247,3 +258,12 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
   - `git ls-files Naive_RAG/server/.env Naive_RAG/server/dist Naive_RAG/server/node_modules` returned no tracked runtime/generated paths.
   - `git check-ignore -v Naive_RAG/server/.env Naive_RAG/server/dist Naive_RAG/server/node_modules` confirmed ignore coverage from `server/.gitignore`.
 - App scope cleanup verification: `npm run lint` and `npm run build` from `client/` passed; `npm run build`, `npm test -- --runInBand`, and `npm run test:e2e -- auth.e2e-spec.ts --runInBand` from `server/` passed. Auth e2e required local-bind permission for Supertest.
+- Adaptive RAG verification:
+  - `npm test -- adaptive-rag.service.spec.ts --runInBand` from `server/` passed.
+  - `npm test -- chat.service.spec.ts --runInBand` and `npm test -- chat.controller.spec.ts --runInBand` from `server/` passed after chat SSE integration.
+  - `npm test -- adaptive-rag.service.spec.ts chat.service.spec.ts chat.controller.spec.ts env.spec.ts --runInBand` from `server/` passed with `4` suites and `42` tests.
+  - `npm test -- --runInBand` from `server/` passed with `17` suites and `99` tests.
+  - `npm run build` from `server/` passed.
+  - `npm run lint` from `client/` passed with the existing Fast Refresh warnings only.
+  - `npm run build` from `client/` passed.
+  - Manual Adaptive RAG acceptance was not run because it requires live Postgres, Qdrant, and Ollama services with the configured embedding/chat models.

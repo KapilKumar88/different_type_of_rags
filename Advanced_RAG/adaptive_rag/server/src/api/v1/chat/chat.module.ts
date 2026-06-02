@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DocumentsModule } from '../documents/documents.module';
+import { AdaptiveRagModule } from '../../../services/adaptive-rag/adaptive-rag.module';
 import { EmbeddingsModule } from '../../../services/embeddings/embeddings.module';
 import { LlmModule } from '../../../services/llm/llm.module';
 import { QdrantModule } from '../../../services/qdrant/qdrant.module';
@@ -11,6 +12,7 @@ import { ChatService } from './chat.service';
 @Module({
   imports: [
     DocumentsModule,
+    AdaptiveRagModule,
     EmbeddingsModule,
     LlmModule,
     QdrantModule,

@@ -1,0 +1,1 @@
+ALTER TABLE "conversation_messages" ADD COLUMN "adaptive_trace" jsonb;

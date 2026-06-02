@@ -1,11 +1,21 @@
-import { Copy, FileText, MessageSquarePlus, Plus, RefreshCw, Sparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  Copy,
+  FileText,
+  GitBranch,
+  MessageSquarePlus,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/chat/markdown";
 import { suggestedPrompts } from "@/components/chat/chat.constants";
 import { formatRelativeTime } from "@/components/chat/chat.helpers";
-import type { SourceChunk } from "@/types/chat.types";
+import type { AdaptiveRagFallbackReason, AdaptiveRagTrace, SourceChunk } from "@/types/chat.types";
 import type { ChatMessage } from "@/types/chat-ui.types";
 import { toast } from "sonner";
 
@@ -51,6 +61,9 @@ export function MessageRow({
         </div>
         {!isUser && message.sources && message.sources.length > 0 && (
           <SourceChunks sources={message.sources} />
+        )}
+        {!isUser && message.adaptiveTrace && (
+          <AdaptiveTracePanel adaptiveTrace={message.adaptiveTrace} />
         )}
         <span className="px-1 text-[11px] text-muted-foreground">
           {formatRelativeTime(message.createdAt)}
@@ -192,6 +205,111 @@ function SourceChunks({ sources }: Readonly<{ sources: SourceChunk[] }>) {
       </div>
     </div>
   );
+}
+
+function AdaptiveTracePanel({ adaptiveTrace }: Readonly<{ adaptiveTrace: AdaptiveRagTrace }>) {
+  const totalRelevantSources = adaptiveTrace.retrievalAttempts.reduce(
+    (total, attempt) => total + attempt.relevantCount,
+    0,
+  );
+  const answerCheckStatus = getAnswerCheckStatus(adaptiveTrace);
+
+  return (
+    <details className="w-full rounded-lg border border-border bg-muted/20 p-3">
+      <summary className="flex cursor-pointer flex-wrap items-center gap-1.5 text-xs font-medium text-foreground">
+        <GitBranch className="h-3.5 w-3.5" />
+        Adaptive trace
+        <Badge variant="secondary" className="font-normal">
+          {adaptiveTrace.route}
+        </Badge>
+        {adaptiveTrace.usedRewrite && (
+          <Badge variant="outline" className="font-normal">
+            rewrite
+          </Badge>
+        )}
+        {adaptiveTrace.fallbackReason && (
+          <Badge variant="outline" className="font-normal">
+            {formatFallbackReason(adaptiveTrace.fallbackReason)}
+          </Badge>
+        )}
+      </summary>
+      <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant="secondary" className="font-normal">
+            {adaptiveTrace.retrievalAttempts.length} retrieval attempts
+          </Badge>
+          <Badge variant="secondary" className="font-normal">
+            {totalRelevantSources} relevant chunks
+          </Badge>
+          <Badge variant="secondary" className="font-normal">
+            {answerCheckStatus}
+          </Badge>
+        </div>
+        <div className="space-y-1">
+          {adaptiveTrace.retrievalAttempts.map((attempt) => (
+            <div
+              key={`${attempt.attempt}-${attempt.query}`}
+              className="rounded-md border border-border bg-background/60 px-2 py-1.5"
+            >
+              <div className="flex flex-wrap items-center gap-1.5 text-foreground">
+                <span>Attempt {attempt.attempt}</span>
+                {attempt.rewritten && (
+                  <Badge variant="outline" className="font-normal">
+                    rewritten
+                  </Badge>
+                )}
+                <span>
+                  {attempt.relevantCount}/{attempt.retrievedCount} relevant
+                </span>
+              </div>
+              <p className="mt-1 max-h-10 overflow-hidden break-words">{attempt.query}</p>
+            </div>
+          ))}
+        </div>
+        <AnswerCheckRow adaptiveTrace={adaptiveTrace} />
+      </div>
+    </details>
+  );
+}
+
+function AnswerCheckRow({ adaptiveTrace }: Readonly<{ adaptiveTrace: AdaptiveRagTrace }>) {
+  const answerCheck = adaptiveTrace.answerCheck;
+
+  if (!answerCheck) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <XCircle className="h-3.5 w-3.5" />
+        Answer validation not completed
+      </div>
+    );
+  }
+
+  const Icon = answerCheck.grounded && answerCheck.useful ? CheckCircle2 : XCircle;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Icon className="h-3.5 w-3.5" />
+      <span>Grounded: {answerCheck.grounded ? "yes" : "no"}</span>
+      <span>Useful: {answerCheck.useful ? "yes" : "no"}</span>
+      {answerCheck.reason && <span className="break-words">· {answerCheck.reason}</span>}
+    </div>
+  );
+}
+
+function getAnswerCheckStatus(adaptiveTrace: AdaptiveRagTrace): string {
+  if (!adaptiveTrace.answerCheck) {
+    return "not validated";
+  }
+
+  if (adaptiveTrace.answerCheck.grounded && adaptiveTrace.answerCheck.useful) {
+    return "validated";
+  }
+
+  return "fallback";
+}
+
+function formatFallbackReason(reason: AdaptiveRagFallbackReason): string {
+  return reason.replaceAll("_", " ");
 }
 
 function StreamingDots() {

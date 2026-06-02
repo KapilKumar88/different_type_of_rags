@@ -8,6 +8,51 @@ export type SourceChunk = {
   createdAt: string;
 };
 
+export type AdaptiveRagRoute = "document" | "fallback";
+
+export type AdaptiveRagFallbackReason =
+  | "empty_document_scope"
+  | "non_document_question"
+  | "no_relevant_sources"
+  | "empty_answer"
+  | "ungrounded_answer"
+  | "runtime_error";
+
+export type AdaptiveRagRetrievalAttempt = {
+  attempt: number;
+  query: string;
+  rewritten: boolean;
+  retrievedCount: number;
+  relevantCount: number;
+  maxScore: number | null;
+  minScoreThreshold: number;
+};
+
+export type AdaptiveRagSourceGrade = {
+  chunkId: string;
+  documentId: string;
+  relevant: boolean;
+  score: number;
+  reason?: string;
+};
+
+export type AdaptiveRagAnswerCheck = {
+  grounded: boolean;
+  useful: boolean;
+  reason?: string;
+};
+
+export type AdaptiveRagTrace = {
+  route: AdaptiveRagRoute;
+  finalQuery: string;
+  usedRewrite: boolean;
+  retrievalAttempts: AdaptiveRagRetrievalAttempt[];
+  sourceGrades: AdaptiveRagSourceGrade[];
+  answerCheck: AdaptiveRagAnswerCheck | null;
+  fallbackReason: AdaptiveRagFallbackReason | null;
+  createdAt: string;
+};
+
 export type ConversationMessageRole = "user" | "assistant";
 
 export type ConversationMessage = {
@@ -16,6 +61,7 @@ export type ConversationMessage = {
   role: ConversationMessageRole;
   content: string;
   sources: SourceChunk[] | null;
+  adaptiveTrace: AdaptiveRagTrace | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -110,6 +156,10 @@ export type SourcesStreamEvent = {
   sources: SourceChunk[];
 };
 
+export type AdaptiveTraceStreamEvent = {
+  adaptiveTrace: AdaptiveRagTrace;
+};
+
 export type TokenStreamEvent = {
   token: string;
 };
@@ -125,6 +175,7 @@ export type ErrorStreamEvent = {
 
 export type ChatStreamHandlers = {
   onSources?: (event: SourcesStreamEvent) => void;
+  onAdaptiveTrace?: (event: AdaptiveTraceStreamEvent) => void;
   onToken?: (event: TokenStreamEvent) => void;
   onDone?: (event: DoneStreamEvent) => void;
   onError?: (event: ErrorStreamEvent) => void;

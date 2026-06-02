@@ -417,6 +417,17 @@ export function ChatPage() {
           current.map((message) => (message.id === pendingId ? { ...message, sources } : message)),
         );
       },
+      onAdaptiveTrace: ({ adaptiveTrace }) => {
+        if (activeStreamIdRef.current !== streamId) {
+          return;
+        }
+
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === pendingId ? { ...message, adaptiveTrace } : message,
+          ),
+        );
+      },
       onToken: ({ token }) => {
         if (activeStreamIdRef.current !== streamId) {
           return;

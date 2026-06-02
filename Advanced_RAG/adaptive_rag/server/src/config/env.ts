@@ -59,6 +59,22 @@ const envSchema = z
       .int()
       .positive()
       .default(4),
+    ADAPTIVE_RAG_MAX_RETRIEVAL_ATTEMPTS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(2),
+    ADAPTIVE_RAG_MIN_SOURCE_SCORE: z.coerce.number().min(0).default(0.2),
+    ADAPTIVE_RAG_MAX_GRADED_SOURCES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(5),
+    ADAPTIVE_RAG_MAX_ANSWER_ATTEMPTS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(2),
   })
   .superRefine((env, context) => {
     if (env.NODE_ENV !== 'production') {

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ragConfig } from '../../../config/rag.config';
 import type { ConversationMessage } from '../../../database/schemas';
+import { AdaptiveRagService } from '../../../services/adaptive-rag/adaptive-rag.service';
 import type { RetrievedChunk } from '../../../types/rag.types';
 import { DocumentsService } from '../documents/documents.service';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
@@ -32,7 +33,12 @@ export type ConversationAnswerContext = {
   sources: RetrievedChunk[];
 };
 
-export type ChatStreamEventType = 'sources' | 'token' | 'done' | 'error';
+export type ChatStreamEventType =
+  | 'sources'
+  | 'adaptive_trace'
+  | 'token'
+  | 'done'
+  | 'error';
 
 const omittedHistoryNotice = '[Earlier conversation history omitted]';
 
@@ -67,6 +73,7 @@ export class ChatService {
     private readonly chatRepository: ChatRepository,
     private readonly documentsService: DocumentsService,
     private readonly ragConcurrencyLimiter: RagConcurrencyLimiterService,
+    private readonly adaptiveRagService: AdaptiveRagService,
   ) {}
 
   listConversations(userId: string): Promise<ConversationSummary[]> {
@@ -211,47 +218,35 @@ export class ChatService {
         conversationId,
       );
       const userMessage = await this.getUserMessage(conversationId, messageId);
-      const sources = await this.retrieveConversationSources(
-        conversation,
-        userMessage.content,
-      );
-
-      yield this.createStreamEvent('sources', { sources });
-
-      if (sources.length === 0) {
-        yield* this.persistAndStreamFallback(conversationId, sources);
-        return;
-      }
-
       const messages =
         await this.chatRepository.findMessagesByConversation(conversationId);
-      const prompt = this.buildConversationPrompt(
-        sources,
-        messages,
-        userMessage.content,
-      );
-      const tokens: string[] = [];
+      const adaptiveAnswer = await this.adaptiveRagService.generateAnswer({
+        question: userMessage.content,
+        documentIds: conversation.documentIds,
+        messages: messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      });
+      const sources = adaptiveAnswer.sources;
 
-      for await (const token of this.ragConcurrencyLimiter.runStream(
-        'llm-stream',
-        () => this.llmService.streamAnswer(prompt),
+      yield this.createStreamEvent('sources', { sources });
+      yield this.createStreamEvent('adaptive_trace', {
+        adaptiveTrace: adaptiveAnswer.trace,
+      });
+
+      for (const token of this.splitAnswerIntoStreamTokens(
+        adaptiveAnswer.answer,
       )) {
-        tokens.push(token);
         yield this.createStreamEvent('token', { token });
-      }
-
-      const answer = tokens.join('').trim();
-
-      if (!answer) {
-        yield* this.persistAndStreamFallback(conversationId, sources);
-        return;
       }
 
       const message = await this.chatRepository.createMessage({
         conversationId,
         role: 'assistant',
-        content: answer,
+        content: adaptiveAnswer.answer,
         sources,
+        adaptiveTrace: adaptiveAnswer.trace,
       });
 
       yield this.createStreamEvent('done', { message });
@@ -380,6 +375,7 @@ export class ChatService {
       role: 'assistant',
       content: ragConfig.fallbackAnswer,
       sources,
+      adaptiveTrace: null,
     });
 
     yield this.createStreamEvent('done', { message });
@@ -411,6 +407,14 @@ export class ChatService {
       code: 'stream_failed',
       message: 'Unable to stream assistant response',
     });
+  }
+
+  private splitAnswerIntoStreamTokens(answer: string): string[] {
+    if (!answer) {
+      return [ragConfig.fallbackAnswer];
+    }
+
+    return answer.split(/(\s+)/).filter((token) => token.length > 0);
   }
 
   private async getOwnedConversation(

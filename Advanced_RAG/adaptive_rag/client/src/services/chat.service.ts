@@ -3,6 +3,7 @@ import { apiClient } from "@/lib/api-client";
 import { clientLogger } from "@/lib/client-logger";
 import type {
   ChatStreamHandlers,
+  AdaptiveTraceStreamEvent,
   ConversationDetailsResponse,
   ConversationListResponse,
   CreateConversationPayload,
@@ -100,6 +101,10 @@ export const chatService = {
 
     eventSource.addEventListener("sources", (event) => {
       handlers.onSources?.(parseStreamEvent<SourcesStreamEvent>(event));
+    });
+
+    eventSource.addEventListener("adaptive_trace", (event) => {
+      handlers.onAdaptiveTrace?.(parseStreamEvent<AdaptiveTraceStreamEvent>(event));
     });
 
     eventSource.addEventListener("token", (event) => {

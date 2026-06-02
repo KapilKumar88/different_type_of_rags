@@ -40,14 +40,35 @@ const envSchema = z
     OLLAMA_BASE_URL: z.url().default('http://localhost:11434'),
     OLLAMA_EMBEDDING_MODEL: z.string().min(1).default('nomic-embed-text:v1.5'),
     OLLAMA_LLM_MODEL: z.string().min(1).default('minimax-m2.5:cloud'),
+    TAVILY_API_KEY: z
+      .string()
+      .trim()
+      .optional()
+      .transform((value) => value || undefined),
+    TAVILY_BASE_URL: z.url().default('https://api.tavily.com'),
     RAG_TOP_K: z.coerce.number().int().positive().default(8),
     RAG_MULTI_QUERY_COUNT: z.coerce.number().int().positive().default(5),
-    RAG_SELF_RAG_MAX_ATTEMPTS: z.coerce.number().int().positive().default(2),
-    RAG_SELF_RAG_CANDIDATE_MULTIPLIER: z.coerce
+    RAG_CORRECTIVE_RAG_MAX_ATTEMPTS: z.coerce
       .number()
       .int()
       .positive()
       .default(2),
+    RAG_CORRECTIVE_RAG_CANDIDATE_MULTIPLIER: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(2),
+    RAG_WEB_SEARCH_MAX_RESULTS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .default(5),
+    RAG_WEB_SEARCH_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(10000),
     RAG_UPLOAD_RATE_LIMIT_TTL_MS: z.coerce
       .number()
       .int()

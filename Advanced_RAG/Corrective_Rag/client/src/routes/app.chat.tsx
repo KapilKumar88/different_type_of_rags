@@ -684,7 +684,7 @@ export function ChatPage() {
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Sparkles className="h-3 w-3" />
                   {activeConversationId
-                    ? "Self-RAG · scoped retrieval"
+                    ? "Corrective RAG · scoped retrieval"
                     : "Select documents to chat"}
                 </div>
                 <Button

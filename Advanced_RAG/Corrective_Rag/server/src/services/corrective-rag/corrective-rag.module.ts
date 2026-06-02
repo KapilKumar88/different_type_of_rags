@@ -4,8 +4,9 @@ import { LlmModule } from '../llm/llm.module';
 import { MultiQueryModule } from '../multi-query/multi-query.module';
 import { QdrantModule } from '../qdrant/qdrant.module';
 import { RagRuntimeModule } from '../rag-runtime/rag-runtime.module';
-import { SelfRagEvaluatorService } from './self-rag-evaluator.service';
-import { SelfRagService } from './self-rag.service';
+import { WebSearchModule } from '../web-search/web-search.module';
+import { CorrectiveRagEvaluatorService } from './corrective-rag-evaluator.service';
+import { CorrectiveRagService } from './corrective-rag.service';
 
 @Module({
   imports: [
@@ -14,8 +15,9 @@ import { SelfRagService } from './self-rag.service';
     MultiQueryModule,
     QdrantModule,
     RagRuntimeModule,
+    WebSearchModule,
   ],
-  providers: [SelfRagService, SelfRagEvaluatorService],
-  exports: [SelfRagService],
+  providers: [CorrectiveRagService, CorrectiveRagEvaluatorService],
+  exports: [CorrectiveRagService],
 })
-export class SelfRagModule {}
+export class CorrectiveRagModule {}

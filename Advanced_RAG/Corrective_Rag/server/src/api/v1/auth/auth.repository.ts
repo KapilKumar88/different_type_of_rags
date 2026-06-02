@@ -13,8 +13,6 @@ export class AuthRepository {
       .from(users)
       .where(eq(users.email, email));
 
-    console.log('Email check result:', user); // Debug log
-
     return Boolean(user?.count);
   }
 

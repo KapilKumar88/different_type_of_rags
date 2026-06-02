@@ -4,8 +4,8 @@ Read this file first in future sessions. It is the compact map of what exists no
 
 ## Read This First
 
-- `client/` is the React frontend. It has real auth flows, protected app routes, API-backed document upload/list/delete, and API-backed persisted Self-RAG conversations with document scoping, SSE streaming, legacy Multi-Query audit rendering, and detailed Self-RAG trace metadata.
-- `server/` is the NestJS backend. It has real auth plus a learning-focused Self-RAG backend with user-owned document ingestion, persisted conversation history, multi-query retrieval query generation, document-scoped Qdrant vector search, LLM relevance/support evaluation, gated SSE chat answering, and RAG abuse controls.
+- `client/` is the React frontend. It has real auth flows, protected app routes, API-backed document upload/list/delete, and API-backed persisted Corrective RAG conversations with document scoping, SSE streaming, legacy Multi-Query/Self-RAG audit rendering, detailed Corrective RAG trace metadata, and document/web source display.
+- `server/` is the NestJS backend. It has real auth plus a learning-focused Corrective RAG backend with user-owned document ingestion, persisted conversation history, multi-query local retrieval, document-scoped Qdrant vector search, LLM retrieval assessment, one corrective local retry, Tavily web fallback after local failure, gated SSE chat answering, and RAG abuse controls.
 - Ignore generated/vendor output while reasoning about the app: `client/node_modules/`, `server/node_modules/`, `client/dist/`, `server/dist/`.
 - Detailed target guides live in:
   - `project_context/TECH-STACK.md`
@@ -26,7 +26,7 @@ Important files and folders:
 | `client/src/routes/app.tsx`                  | Authenticated app shell using sidebar, header, and nested outlet. Route access is protected by `client/src/guard/auth-guard.tsx`.                                                                                                                          |
 | `client/src/routes/login.tsx`                | Real sign-in form using Zod validation, `authService.login`, HttpOnly cookie session, Zustand auth state, and navigation to `/app/chat`.                                                                                                                   |
 | `client/src/routes/register.tsx`             | Real account creation form using Zod validation, `authService.register`, HttpOnly cookie session, Zustand auth state, and navigation to `/app/chat`.                                                                                                       |
-| `client/src/routes/app.chat.tsx`             | API-backed persisted Self-RAG conversation orchestration. Owns queries, mutations, active conversation state, SSE stream lifecycle, Stop/retry, source/retrieval metadata handling, and send flow; presentational chat UI is split into `client/src/components/chat/*`. |
+| `client/src/routes/app.chat.tsx`             | API-backed persisted Corrective RAG conversation orchestration. Owns queries, mutations, active conversation state, SSE stream lifecycle, Stop/retry, source/retrieval metadata handling, and send flow; presentational chat UI is split into `client/src/components/chat/*`. |
 | `client/src/routes/app.documents.tsx`        | API-backed documents table. Loads `/api/v1/documents`, memoizes local search/filter/count derivations, deletes with `DELETE /api/v1/documents/:id`, and refreshes after upload/delete.                                                                     |
 | `client/src/components/app/*`                | App header, sidebar, theme toggle, and real multipart upload dialog for `/api/v1/documents/upload`.                                                                                                                                                        |
 | `client/src/components/auth/auth-layout.tsx` | Shared auth page layout.                                                                                                                                                                                                                                   |
@@ -54,7 +54,7 @@ Important files and folders:
 | `client/public/_headers`                     | Cloudflare-compatible static security headers and immutable cache headers for hashed assets.                                                                                                                                                               |
 | `client/components.json`                     | shadcn configuration and aliases.                                                                                                                                                                                                                          |
 
-Client now has real auth/session handling, typed API services, TanStack Query provider, Zustand auth store, guarded auth/app routes, route-level lazy loading, named Vite vendor chunks, API-backed document management, and API-backed persisted Self-RAG conversations. Chat supports header-upload document cache refresh, descriptive generated titles, inline rename, editable document scope, hard delete, streamed responses with Stop and retry-on-network-error, message timestamps, loading skeletons, buffered token rendering, split presentational components, legacy compact Multi-Query audit display, and an expandable Self-RAG trace panel for attempts, relevance decisions, retries, and answer support.
+Client now has real auth/session handling, typed API services, TanStack Query provider, Zustand auth store, guarded auth/app routes, route-level lazy loading, named Vite vendor chunks, API-backed document management, and API-backed persisted Corrective RAG conversations. Chat supports header-upload document cache refresh, descriptive generated titles, inline rename, editable document scope, hard delete, streamed responses with Stop and retry-on-network-error, message timestamps, loading skeletons, buffered token rendering, split presentational components, legacy compact Multi-Query and Self-RAG audit display, an expandable Corrective RAG trace panel, and document/web source cards.
 
 ## Server Current Map
 
@@ -69,13 +69,14 @@ Important files:
 | `server/src/api/v1/auth/*`                            | Auth module with register, login, logout, and current-user endpoints, plus controller/service/repository layering, throttling, and tests.                                                                                                                 |
 | `server/src/api/v1/csrf/*`                            | Public CSRF token endpoint for SPA double-submit token flow.                                                                                                                                                                                              |
 | `server/src/api/v1/documents/*`                       | Documents module with user-scoped upload/list/delete endpoints, upload validation, injectable parsing module, recursive chunking, embedding generation, Qdrant upsert/delete compensation, Postgres metadata repository, and focused tests.               |
-| `server/src/api/v1/chat/*`                            | Chat module with persisted conversations/messages, conversation document membership, Self-RAG answer delegation, unchanged SSE event contracts, rename/scope/delete endpoints, and focused tests.                            |
+| `server/src/api/v1/chat/*`                            | Chat module with persisted conversations/messages, conversation document membership, Corrective RAG answer delegation, unchanged SSE event contracts, rename/scope/delete endpoints, and focused tests.                            |
 | `server/src/services/qdrant/*`                        | Shared Qdrant module that ensures collection creation, upserts vector points, searches by selected document IDs, and deletes points by `documentId`.                                                                                                      |
 | `server/src/services/embeddings/*`                    | Shared Ollama embeddings module using `nomic-embed-text:v1.5` and validating vector size against config.                                                                                                                                                  |
 | `server/src/services/llm/*`                           | Shared Ollama chat module using configured local/cloud Ollama model for final answer generation.                                                                                                                                                          |
 | `server/src/services/parsing/*`                       | Shared document parsing module with parser classes for text-like files, PDF, and DOCX.                                                                                                                                                                    |
 | `server/src/services/multi-query/*`                   | Shared Multi-Query RAG service/module. Uses the existing Ollama LLM to generate bounded alternate retrieval queries, sanitizes model output, includes the original query first, and falls back to the original query on unusable output or dependency errors. |
-| `server/src/services/self-rag/*`                      | Shared Self-RAG service/module. Orchestrates multi-query retrieval, scoped Qdrant candidate retrieval, LLM relevance grading, one refinement retry, gated answer generation, answer support/utility grading, fallback decisions, and metadata trace creation. |
+| `server/src/services/corrective-rag/*`                | Shared Corrective RAG service/module. Orchestrates multi-query local retrieval, scoped Qdrant candidate retrieval, LLM retrieval assessment, one corrective local retry, Tavily web fallback after local failure, gated answer generation, answer support/utility grading, fallback decisions, and metadata trace creation. |
+| `server/src/services/web-search/*`                    | Shared Tavily web-search provider/module. Uses typed web-search config, bearer auth, request timeout/abort handling, sanitized provider failure logging, and bounded web source normalization. |
 | `server/src/services/rag-runtime/*`                   | In-process concurrency limiter for expensive RAG operations such as parsing, embeddings, Qdrant calls, and LLM streaming.                                                                                                                                 |
 | `server/src/common/filters/http-exception.filter.ts`  | Standardizes Nest HTTP errors into `{ success, message, data }`.                                                                                                                                                                                          |
 | `server/src/common/security/csrf-protection.ts`       | Shared `csrf-csrf` double-submit cookie protection and token generation helpers.                                                                                                                                                                          |
@@ -94,7 +95,7 @@ Important files:
 | `server/drizzle.config.ts`                            | Drizzle Kit config for schemas and migrations.                                                                                                                                                                                                            |
 | `server/package.json`                                 | Nest scripts plus Drizzle migration scripts and auth/database dependencies.                                                                                                                                                                               |
 
-Server now has auth, users/documents/conversations table schemas, Drizzle database foundation, Zod validation, typed config, standardized HTTP error responses, cookie/JWT auth guards, document ingestion, upload hardening, Qdrant vector search, Ollama embeddings/LLM calls, persisted conversation history, Self-RAG document-scoped retrieval/evaluation, gated SSE chat, RAG throttling/concurrency controls, prompt context boundaries, and safe SSE error mapping. Server still does not have Redis, BullMQ queues, Socket.io, LangGraph, hybrid search, reranking, or agentic memory.
+Server now has auth, users/documents/conversations table schemas, Drizzle database foundation, Zod validation, typed config, standardized HTTP error responses, cookie/JWT auth guards, document ingestion, upload hardening, Qdrant vector search, Ollama embeddings/LLM calls, persisted conversation history, Corrective RAG document-scoped retrieval/evaluation with Tavily web fallback, gated SSE chat, RAG throttling/concurrency controls, prompt context boundaries, and safe SSE error mapping. Server still does not have Redis, BullMQ queues, Socket.io, LangGraph, reranking, or agentic memory.
 
 ## Auth Module Current State
 
@@ -120,7 +121,7 @@ Auth API response contracts:
 - Safe user shape is `{ id, name, email }`; `passwordHash` is never returned.
 - Auth session is an HttpOnly cookie named by `AUTH_COOKIE_NAME` (`rag_auth_token` by default).
 
-## Self-RAG Module Current State
+## Corrective RAG Module Current State
 
 Implemented backend APIs are protected by the existing cookie JWT guard:
 
@@ -155,13 +156,15 @@ Implemented backend APIs are protected by the existing cookie JWT guard:
 - `POST /api/v1/chat/conversations/:conversationId/messages`
   - Validates `{ content }`, confirms ownership, persists a user message, updates conversation `updatedAt`, and returns `{ message }`.
 - `GET /api/v1/chat/conversations/:conversationId/messages/:messageId/stream`
-  - SSE endpoint for an owned persisted user message. Validates conversation ownership before message lookup, loads bounded conversation history, delegates to `SelfRagService`, emits `sources`, `token`, `done`, and `error` events, and persists the assistant message on completion.
-  - `SelfRagService` generates multi-query retrieval queries, embeds/searches only selected conversation documents in Qdrant, deduplicates/ranks candidates, grades chunk relevance, retries once with a refined query when context or support is weak, generates the answer internally, grades answer support/utility, and returns either an accepted answer or the configured fallback.
-  - The stream is gated: the server completes retrieval/evaluation/answer grading before emitting answer tokens. It then streams the accepted/fallback answer through the existing `token` event contract.
-  - `sources` events use `{ sources, retrievalMetadata }`. New messages use `retrievalMetadata.strategy: "self_rag"` with generated queries, attempt traces, chunk relevance verdicts, retry/refinement details, final decision, and answer support/utility. Older messages with `strategy: "multi_query"` remain readable by the client.
-  - Assistant messages persist nullable `retrievalMetadata` in Postgres. No schema migration was needed because `retrieval_metadata` is JSONB.
+  - SSE endpoint for an owned persisted user message. Validates conversation ownership before message lookup, loads bounded conversation history, delegates to `CorrectiveRagService`, emits `sources`, `token`, `done`, and `error` events, and persists the assistant message on completion.
+  - `CorrectiveRagService` generates multi-query local retrieval queries, embeds/searches only selected conversation documents in Qdrant, deduplicates/ranks candidates, assesses local retrieval as `correct`, `ambiguous`, `incorrect`, or `not_evaluated`, retries once with a corrective local query when local context is weak, and calls Tavily web search only after local retrieval and correction fail.
+  - Tavily web results are not embedded into Qdrant or added to conversation document scope. They are bounded current-answer context and persisted only as assistant-message source metadata.
+  - Final answer generation is gated: the server completes retrieval/correction/web fallback, answer generation, and support grading before emitting answer tokens. It then streams the accepted/fallback answer through the existing `token` event contract.
+  - `sources` events use `{ sources, retrievalMetadata }`. New messages use `retrievalMetadata.strategy: "corrective_rag"` with generated queries, local/corrective attempt traces, retrieval assessments, chunk relevance verdicts, web-search status, final decision, and answer support/utility. Older messages with `strategy: "multi_query"` and `strategy: "self_rag"` remain readable by the client.
+  - `sources` is now a JSONB union of uploaded document chunks and Tavily web sources. Existing persisted document chunks without `sourceType` remain valid; new web sources use `sourceType: "web"`, `sourceId`, `title`, `url`, `content`, `score`, `provider: "tavily"`, and `createdAt`.
+  - Assistant messages persist nullable `retrievalMetadata` in Postgres. No schema migration was needed because `retrieval_metadata` and `sources` are JSONB.
   - Prompt construction separates system rules from `<retrieved_context>`, `<conversation_history>`, and `<latest_user_message>`, treats retrieved/history text as untrusted content, and bounds context/history length.
-  - Final answer generation still uses the original latest user message; generated/refined queries are retrieval audit/input data only.
+  - Final answer generation still uses the original latest user message; generated, corrective, and web-search queries are retrieval audit/input data only.
   - Stream errors are stable public payloads with codes such as `not_found`, `bad_request`, and `stream_failed`; raw dependency errors are not emitted.
 RAG runtime config:
 
@@ -172,10 +175,14 @@ RAG runtime config:
 - `OLLAMA_BASE_URL`, default `http://localhost:11434`
 - `OLLAMA_EMBEDDING_MODEL`, default `nomic-embed-text:v1.5`
 - `OLLAMA_LLM_MODEL`, default `minimax-m2.5:cloud`
+- `TAVILY_API_KEY`, optional; missing or blank disables web fallback and is recorded in metadata.
+- `TAVILY_BASE_URL`, default `https://api.tavily.com`
 - `RAG_TOP_K`, default `8`
 - `RAG_MULTI_QUERY_COUNT`, default `5`
-- `RAG_SELF_RAG_MAX_ATTEMPTS`, default `2`
-- `RAG_SELF_RAG_CANDIDATE_MULTIPLIER`, default `2`
+- `RAG_CORRECTIVE_RAG_MAX_ATTEMPTS`, default `2`
+- `RAG_CORRECTIVE_RAG_CANDIDATE_MULTIPLIER`, default `2`
+- `RAG_WEB_SEARCH_MAX_RESULTS`, default `5`
+- `RAG_WEB_SEARCH_TIMEOUT_MS`, default `10000`
 - `RAG_UPLOAD_RATE_LIMIT_TTL_MS`, default `60000`
 - `RAG_UPLOAD_RATE_LIMIT_LIMIT`, default `5`
 - `RAG_CHAT_RATE_LIMIT_TTL_MS`, default `60000`
@@ -184,7 +191,7 @@ RAG runtime config:
 - `RAG_STREAM_RATE_LIMIT_LIMIT`, default `10`
 - `RAG_RUNTIME_CONCURRENCY_LIMIT`, default `4`
 
-Self-RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and queues. It now includes persisted conversation history, multi-query generation before vector retrieval, relevance/support evaluators, one refinement retry, detailed retrieval audit metadata, SSE token streaming, upload/chat/stream throttles, in-process concurrency limits, and prompt-boundary safeguards, but not agentic memory outside the stored conversation messages.
+Corrective RAG intentionally excludes LangGraph, agents, reranking, queues, and agentic memory. It now includes persisted conversation history, multi-query local retrieval, LLM retrieval assessment, one corrective local retry, Tavily web fallback after local failure, detailed retrieval audit metadata, SSE token streaming, upload/chat/stream throttles, in-process concurrency limits, and prompt-boundary safeguards.
 
 ## Current Gaps / Do Not Assume
 
@@ -215,12 +222,14 @@ Self-RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and
 - The top-level `langchain` package was removed because it pulled LangGraph transitively. Use focused packages such as `@langchain/ollama` and `@langchain/textsplitters`.
 - Shared RAG infrastructure lives under `server/src/services/*`, not under `server/src/api/v1/*`. Keep API modules focused on HTTP/domain orchestration.
 - Do not reintroduce unscoped vector search or a global ask endpoint. Retrieval must stay scoped through owned conversations and their selected document IDs, even when adding or changing multi-query retrieval.
-- Uploaded document text and conversation history are untrusted prompt data. Keep prompt boundaries and budgets in place when changing answer generation.
+- Uploaded document text, Tavily web snippets, and conversation history are untrusted prompt data. Keep prompt boundaries and budgets in place when changing answer generation.
 - Multi-query generation must also treat conversation history and latest user text as untrusted data. Generated queries are for retrieval only and must not replace the original latest user message in final answer prompts.
 - Multi-query generation must degrade gracefully: blank, overlong, malformed, or failed LLM output falls back to the original user query.
-- Self-RAG evaluator output must be parsed as strict JSON and degrade gracefully. Relevance evaluator failure keeps ranked candidates with `not_evaluated` chunk verdicts; answer evaluator failure streams the generated answer with `finalDecision: "evaluation_degraded"`.
-- Self-RAG answer streaming is gated by design. The client may not receive the first answer token until retrieval, relevance grading, answer generation, and support grading have completed.
-- Do not remove legacy `strategy: "multi_query"` rendering or type support; existing persisted assistant messages can still contain old retrieval metadata.
+- Corrective RAG evaluator output must be parsed as strict JSON and degrade gracefully. Retrieval evaluator failure keeps ranked local candidates with `not_evaluated` chunk verdicts; answer evaluator failure streams the generated answer with `finalDecision: "evaluation_degraded"`.
+- Corrective RAG web fallback must only run after local retrieval plus corrective local retry fail. Tavily results are current-answer context only and must not be indexed into Qdrant or added to conversation document scope.
+- Blank or missing `TAVILY_API_KEY` disables web fallback and should be recorded as a stable metadata status, not treated as a fatal stream error.
+- Corrective RAG answer streaming is gated by design. The client may not receive the first answer token until local retrieval/correction, optional web fallback, answer generation, and support grading have completed.
+- Do not remove legacy `strategy: "multi_query"` or `strategy: "self_rag"` rendering/type support; existing persisted assistant messages can still contain old retrieval metadata.
 - `@langchain/ollama` typings in this environment require `ChatOllama` construction through the model-name overload plus option assignment for deterministic temperature, and streaming uses `streamV2().text`; keep `LlmService` compatible with that API shape.
 - SSE streaming should validate conversation ownership before message lookup and should emit stable public errors, not raw exception messages.
 - Server TypeScript now enables `noImplicitAny`, `strictBindCallApply`, and `noFallthroughCasesInSwitch`; keep new backend code compatible with those checks.
@@ -280,3 +289,10 @@ Self-RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and
   - `npm run lint` from `client/` passed with existing Fast Refresh warnings only.
   - `npm run build` from `client/` passed.
   - Manual runtime acceptance was not run in this environment because the full Postgres/Qdrant/Ollama runtime stack was not confirmed active here.
+- Corrective RAG verification:
+  - Baseline before conversion: `npm test -- self-rag-evaluator.service.spec.ts self-rag.service.spec.ts chat.service.spec.ts multi-query.service.spec.ts env.spec.ts --runInBand` from `server/` passed with `5` suites and `38` tests.
+  - Final targeted server tests: `npm test -- corrective-rag-evaluator.service.spec.ts corrective-rag.service.spec.ts tavily-web-search.service.spec.ts chat.service.spec.ts multi-query.service.spec.ts env.spec.ts --runInBand` from `server/` passed with `6` suites and `45` tests.
+  - `npm run build` from `server/` passed.
+  - `npm run lint` from `client/` passed with existing Fast Refresh warnings only.
+  - `npm run build` from `client/` passed.
+  - Manual runtime acceptance was not run in this environment because the full Postgres/Qdrant/Ollama/Tavily runtime stack was not confirmed active here.

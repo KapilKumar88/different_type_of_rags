@@ -2,7 +2,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   Copy,
+  ExternalLink,
   FileText,
+  Globe,
   MessageSquarePlus,
   Plus,
   RefreshCw,
@@ -20,12 +22,16 @@ import { Markdown } from "@/components/chat/markdown";
 import { suggestedPrompts } from "@/components/chat/chat.constants";
 import { formatRelativeTime } from "@/components/chat/chat.helpers";
 import type {
+  CorrectiveRagAttemptTrace,
+  CorrectiveRagFinalDecision,
+  CorrectiveRagWebSearchStatus,
   MultiQueryRetrievalMetadata,
+  MessageSource,
   RetrievalMetadata,
   SelfRagAttemptTrace,
   SelfRagChunkEvaluation,
   SelfRagFinalDecision,
-  SourceChunk,
+  WebSource,
 } from "@/types/chat.types";
 import type { ChatMessage } from "@/types/chat-ui.types";
 import { toast } from "sonner";
@@ -188,11 +194,85 @@ export function EmptyState({
 }
 
 function RetrievalAudit({ retrievalMetadata }: Readonly<{ retrievalMetadata: RetrievalMetadata }>) {
+  if (retrievalMetadata.strategy === "corrective_rag") {
+    return <CorrectiveRagTrace retrievalMetadata={retrievalMetadata} />;
+  }
+
   if (retrievalMetadata.strategy === "self_rag") {
     return <SelfRagTrace retrievalMetadata={retrievalMetadata} />;
   }
 
   return <MultiQueryAudit retrievalMetadata={retrievalMetadata} />;
+}
+
+function CorrectiveRagTrace({
+  retrievalMetadata,
+}: Readonly<{
+  retrievalMetadata: Extract<RetrievalMetadata, { strategy: "corrective_rag" }>;
+}>) {
+  const answerEvaluation = retrievalMetadata.answerEvaluation;
+  const webSearch = retrievalMetadata.webSearch;
+
+  return (
+    <details className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Corrective RAG trace</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <CorrectiveDecisionBadge decision={retrievalMetadata.finalDecision} />
+          <WebSearchBadge status={webSearch.status} />
+        </span>
+      </summary>
+
+      <div className="mt-3 space-y-3">
+        <TraceSection title="Answer check">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <EvaluationBadge
+              value={answerEvaluation.verdict}
+              icon={<CheckCircle2 className="h-3 w-3" />}
+            />
+            <EvaluationBadge
+              value={answerEvaluation.utility}
+              icon={<Sparkles className="h-3 w-3" />}
+            />
+          </div>
+          <p className="mt-1.5 leading-5 text-muted-foreground">{answerEvaluation.reason}</p>
+        </TraceSection>
+
+        <TraceSection title="Web fallback">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <WebSearchBadge status={webSearch.status} />
+            <Badge variant="secondary" className="font-normal">
+              {webSearch.resultCount} results
+            </Badge>
+          </div>
+          {webSearch.query && <TraceLine label="Query" value={webSearch.query} />}
+          {webSearch.reason && (
+            <p className="mt-1.5 leading-5 text-muted-foreground">{webSearch.reason}</p>
+          )}
+        </TraceSection>
+
+        <TraceSection title="Queries">
+          <ol className="space-y-1">
+            {retrievalMetadata.generatedQueries.map((query, index) => (
+              <li key={`${query}-${index}`} className="flex min-w-0 gap-2 text-muted-foreground">
+                <span className="shrink-0 tabular-nums">{index + 1}.</span>
+                <span className="min-w-0 break-words">{query}</span>
+              </li>
+            ))}
+          </ol>
+        </TraceSection>
+
+        <div className="space-y-2">
+          {retrievalMetadata.attempts.map((attempt) => (
+            <CorrectiveAttemptTrace key={attempt.attemptNumber} attempt={attempt} />
+          ))}
+        </div>
+      </div>
+    </details>
+  );
 }
 
 function MultiQueryAudit({
@@ -270,6 +350,55 @@ function SelfRagTrace({
             <AttemptTrace key={attempt.attemptNumber} attempt={attempt} />
           ))}
         </div>
+      </div>
+    </details>
+  );
+}
+
+function CorrectiveAttemptTrace({
+  attempt,
+}: Readonly<{
+  attempt: CorrectiveRagAttemptTrace;
+}>) {
+  const title = attempt.attemptType === "initial_local" ? "Initial local" : "Corrective local";
+
+  return (
+    <details className="border-t border-border pt-2" open={attempt.attemptNumber === 1}>
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-foreground">
+        <span className="flex items-center gap-1.5 font-medium">
+          <Search className="h-3.5 w-3.5" />
+          {title}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <RetrievalStatusBadge status={attempt.assessment.status} />
+          <span className="text-muted-foreground">
+            {attempt.acceptedChunkCount}/{attempt.retrievedChunkCount} accepted
+          </span>
+        </span>
+      </summary>
+
+      <div className="mt-2 space-y-2">
+        <TraceLine label="Seed" value={attempt.seedQuery} />
+        {attempt.correctiveQuery && (
+          <TraceLine
+            label="Corrected"
+            value={attempt.correctiveQuery}
+            icon={<RotateCw className="h-3 w-3" />}
+          />
+        )}
+        <p className="leading-5 text-muted-foreground">{attempt.assessment.reason}</p>
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant="secondary" className="font-normal">
+            {attempt.retrievedChunkCount} retrieved
+          </Badge>
+          <Badge variant="secondary" className="font-normal">
+            {attempt.acceptedChunkCount} accepted
+          </Badge>
+          <Badge variant="outline" className="font-normal">
+            {attempt.rejectedChunkCount} rejected
+          </Badge>
+        </div>
+        <ChunkEvaluationList evaluations={attempt.chunkEvaluations} />
       </div>
     </details>
   );
@@ -392,6 +521,43 @@ function DecisionBadge({ decision }: Readonly<{ decision: SelfRagFinalDecision }
   );
 }
 
+function CorrectiveDecisionBadge({
+  decision,
+}: Readonly<{
+  decision: CorrectiveRagFinalDecision;
+}>) {
+  return (
+    <Badge variant="outline" className={getCorrectiveDecisionClassName(decision)}>
+      {formatCorrectiveDecision(decision)}
+    </Badge>
+  );
+}
+
+function RetrievalStatusBadge({
+  status,
+}: Readonly<{
+  status: CorrectiveRagAttemptTrace["assessment"]["status"];
+}>) {
+  return (
+    <Badge variant="secondary" className="font-normal">
+      {formatEvaluationValue(status)}
+    </Badge>
+  );
+}
+
+function WebSearchBadge({
+  status,
+}: Readonly<{
+  status: CorrectiveRagWebSearchStatus;
+}>) {
+  return (
+    <Badge variant={status === "searched" ? "secondary" : "outline"} className="gap-1 font-normal">
+      <Globe className="h-3 w-3" />
+      {formatWebSearchStatus(status)}
+    </Badge>
+  );
+}
+
 function EvaluationBadge({
   value,
   icon,
@@ -420,6 +586,23 @@ function formatDecision(decision: SelfRagFinalDecision): string {
   }
 }
 
+function formatCorrectiveDecision(decision: CorrectiveRagFinalDecision): string {
+  switch (decision) {
+    case "answered_with_local_context":
+      return "Local answer";
+    case "answered_with_corrected_context":
+      return "Corrected answer";
+    case "answered_with_web_context":
+      return "Web answer";
+    case "insufficient_context":
+      return "Insufficient context";
+    case "unsupported_answer":
+      return "Unsupported";
+    case "evaluation_degraded":
+      return "Evaluation degraded";
+  }
+}
+
 function getDecisionClassName(decision: SelfRagFinalDecision): string {
   switch (decision) {
     case "answered":
@@ -430,6 +613,38 @@ function getDecisionClassName(decision: SelfRagFinalDecision): string {
       return "border-destructive/40 bg-destructive/10 text-destructive";
     case "evaluation_degraded":
       return "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  }
+}
+
+function getCorrectiveDecisionClassName(decision: CorrectiveRagFinalDecision): string {
+  switch (decision) {
+    case "answered_with_local_context":
+      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "answered_with_corrected_context":
+      return "border-teal-500/40 bg-teal-500/10 text-teal-700 dark:text-teal-300";
+    case "answered_with_web_context":
+      return "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+    case "insufficient_context":
+      return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    case "unsupported_answer":
+      return "border-destructive/40 bg-destructive/10 text-destructive";
+    case "evaluation_degraded":
+      return "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300";
+  }
+}
+
+function formatWebSearchStatus(status: CorrectiveRagWebSearchStatus): string {
+  switch (status) {
+    case "not_needed":
+      return "Web not needed";
+    case "disabled":
+      return "Web disabled";
+    case "searched":
+      return "Web searched";
+    case "no_results":
+      return "No web results";
+    case "failed":
+      return "Web failed";
   }
 }
 
@@ -463,35 +678,97 @@ function formatEvaluationValue(value: string): string {
   return value.replace(/_/g, " ");
 }
 
-function SourceChunks({ sources }: Readonly<{ sources: SourceChunk[] }>) {
+function SourceChunks({ sources }: Readonly<{ sources: MessageSource[] }>) {
   return (
     <div className="w-full space-y-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-muted-foreground">Retrieved chunks:</span>
+        <span className="text-xs text-muted-foreground">Retrieved sources:</span>
         {sources.map((source) => (
-          <Badge key={source.chunkId} variant="secondary" className="gap-1 font-normal">
-            <FileText className="h-3 w-3" />
-            {source.fileName}
-            {source.pageNumber ? ` · p.${source.pageNumber}` : ""}
-            {` · ${source.score.toFixed(3)}`}
-          </Badge>
+          <SourceBadge key={getSourceKey(source)} source={source} />
         ))}
       </div>
       <div className="space-y-2">
         {sources.map((source, index) => (
-          <details key={source.chunkId} className="rounded-lg border border-border bg-muted/30 p-3">
-            <summary className="cursor-pointer text-xs font-medium text-foreground">
-              Source {index + 1}: {source.fileName}
-              {source.pageNumber ? ` · page ${source.pageNumber}` : ""}
-            </summary>
-            <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
-              {source.text}
-            </p>
-          </details>
+          <SourceDetails key={getSourceKey(source)} source={source} index={index} />
         ))}
       </div>
     </div>
   );
+}
+
+function SourceBadge({ source }: Readonly<{ source: MessageSource }>) {
+  if (isWebSource(source)) {
+    return (
+      <Badge variant="secondary" className="max-w-full gap-1 font-normal">
+        <Globe className="h-3 w-3 shrink-0" />
+        <span className="min-w-0 truncate">{source.title}</span>
+        {` · ${source.score.toFixed(3)}`}
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="secondary" className="max-w-full gap-1 font-normal">
+      <FileText className="h-3 w-3 shrink-0" />
+      <span className="min-w-0 truncate">{source.fileName}</span>
+      {source.pageNumber !== undefined ? ` · p.${source.pageNumber}` : ""}
+      {` · ${source.score.toFixed(3)}`}
+    </Badge>
+  );
+}
+
+function SourceDetails({
+  source,
+  index,
+}: Readonly<{
+  source: MessageSource;
+  index: number;
+}>) {
+  if (isWebSource(source)) {
+    return (
+      <details className="rounded-lg border border-border bg-muted/30 p-3">
+        <summary className="cursor-pointer text-xs font-medium text-foreground">
+          Source {index + 1}: {source.title}
+        </summary>
+        <a
+          href={source.url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 flex min-w-0 items-center gap-1 break-all text-xs text-primary hover:underline"
+        >
+          <ExternalLink className="h-3 w-3 shrink-0" />
+          {source.url}
+        </a>
+        <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+          {source.content}
+        </p>
+      </details>
+    );
+  }
+
+  return (
+    <details className="rounded-lg border border-border bg-muted/30 p-3">
+      <summary className="cursor-pointer text-xs font-medium text-foreground">
+        Source {index + 1}: {source.fileName}
+        {source.pageNumber !== undefined ? ` · page ${source.pageNumber}` : ""}
+      </summary>
+      <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+        {source.text}
+      </p>
+    </details>
+  );
+}
+
+function getSourceKey(source: MessageSource): string {
+  if (isWebSource(source)) {
+    return source.sourceId;
+  }
+
+  return source.chunkId;
+}
+
+function isWebSource(source: MessageSource): source is WebSource {
+  return source.sourceType === "web";
 }
 
 function StreamingDots() {

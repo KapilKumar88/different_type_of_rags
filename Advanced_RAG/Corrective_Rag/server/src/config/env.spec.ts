@@ -25,11 +25,24 @@ describe('server environment config', () => {
     expect(parsedEnvironment.SERVER_REQUEST_TIMEOUT_MS).toBe(600000);
   });
 
-  it('applies Self-RAG evaluator defaults', () => {
+  it('applies Corrective RAG and web-search defaults', () => {
     const parsedEnvironment = parseEnvironment(validEnvironment);
 
-    expect(parsedEnvironment.RAG_SELF_RAG_MAX_ATTEMPTS).toBe(2);
-    expect(parsedEnvironment.RAG_SELF_RAG_CANDIDATE_MULTIPLIER).toBe(2);
+    expect(parsedEnvironment.RAG_CORRECTIVE_RAG_MAX_ATTEMPTS).toBe(2);
+    expect(parsedEnvironment.RAG_CORRECTIVE_RAG_CANDIDATE_MULTIPLIER).toBe(2);
+    expect(parsedEnvironment.TAVILY_BASE_URL).toBe('https://api.tavily.com');
+    expect(parsedEnvironment.TAVILY_API_KEY).toBeUndefined();
+    expect(parsedEnvironment.RAG_WEB_SEARCH_MAX_RESULTS).toBe(5);
+    expect(parsedEnvironment.RAG_WEB_SEARCH_TIMEOUT_MS).toBe(10000);
+  });
+
+  it('treats a blank Tavily API key as not configured', () => {
+    const parsedEnvironment = parseEnvironment({
+      ...validEnvironment,
+      TAVILY_API_KEY: '',
+    });
+
+    expect(parsedEnvironment.TAVILY_API_KEY).toBeUndefined();
   });
 
   it('loads values from a dotenv-style file', () => {

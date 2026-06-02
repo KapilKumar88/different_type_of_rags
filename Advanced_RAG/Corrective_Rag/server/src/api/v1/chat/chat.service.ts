@@ -7,9 +7,9 @@ import {
 import type { ConversationMessage } from '../../../database/schemas';
 import type {
   RetrievalMetadata,
-  RetrievedChunk,
+  RetrievedSource,
 } from '../../../types/rag.types';
-import { SelfRagService } from '../../../services/self-rag/self-rag.service';
+import { CorrectiveRagService } from '../../../services/corrective-rag/corrective-rag.service';
 import { DocumentsService } from '../documents/documents.service';
 import {
   ChatRepository,
@@ -28,7 +28,7 @@ export type ConversationDetails = ConversationWithDocumentIds & {
 
 export type ConversationAnswerContext = {
   conversation: ConversationWithDocumentIds;
-  sources: RetrievedChunk[];
+  sources: RetrievedSource[];
   retrievalMetadata: RetrievalMetadata;
 };
 
@@ -39,7 +39,7 @@ export class ChatService {
   constructor(
     private readonly chatRepository: ChatRepository,
     private readonly documentsService: DocumentsService,
-    private readonly selfRagService: SelfRagService,
+    private readonly correctiveRagService: CorrectiveRagService,
   ) {}
 
   listConversations(userId: string): Promise<ConversationSummary[]> {
@@ -164,7 +164,7 @@ export class ChatService {
     );
     const messages =
       await this.chatRepository.findMessagesByConversation(conversationId);
-    const result = await this.selfRagService.generateAnswer({
+    const result = await this.correctiveRagService.generateAnswer({
       latestUserMessage: question,
       historyMessages: messages.map((message) => ({
         role: message.role,
@@ -193,7 +193,7 @@ export class ChatService {
       const userMessage = await this.getUserMessage(conversationId, messageId);
       const messages =
         await this.chatRepository.findMessagesByConversation(conversationId);
-      const result = await this.selfRagService.generateAnswer({
+      const result = await this.correctiveRagService.generateAnswer({
         latestUserMessage: userMessage.content,
         historyMessages: this.excludeLatestUserMessage(
           messages,

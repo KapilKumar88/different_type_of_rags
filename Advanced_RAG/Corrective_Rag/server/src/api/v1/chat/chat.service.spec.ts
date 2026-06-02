@@ -1,10 +1,10 @@
 import type { MessageEvent } from '@nestjs/common';
 import type { ConversationMessage, Document } from '../../../database/schemas';
 import type {
+  CorrectiveRagRetrievalMetadata,
   RetrievedChunk,
-  SelfRagRetrievalMetadata,
 } from '../../../types/rag.types';
-import { SelfRagService } from '../../../services/self-rag/self-rag.service';
+import { CorrectiveRagService } from '../../../services/corrective-rag/corrective-rag.service';
 import { DocumentsService } from '../documents/documents.service';
 import { ChatRepository } from './chat.repository';
 import { ChatService } from './chat.service';
@@ -16,7 +16,7 @@ function createChunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
     chunkId: 'chunk-1',
     documentId: 'document-1',
     fileName: 'rag-notes.txt',
-    text: 'Self-RAG evaluates retrieved chunks before answering.',
+    text: 'Corrective RAG evaluates and corrects retrieval before answering.',
     createdAt: '2026-01-01T00:00:00.000Z',
     score: 0.91,
     ...overrides,
@@ -37,24 +37,29 @@ function createDocumentRecord(overrides: Partial<Document> = {}): Document {
   };
 }
 
-function createSelfRagMetadata(
-  overrides: Partial<SelfRagRetrievalMetadata> = {},
-): SelfRagRetrievalMetadata {
+function createCorrectiveRagMetadata(
+  overrides: Partial<CorrectiveRagRetrievalMetadata> = {},
+): CorrectiveRagRetrievalMetadata {
   return {
     originalQuery: 'What does this say?',
     generatedQueries: ['What does this say?'],
     usedQueryCount: 1,
-    strategy: 'self_rag',
+    strategy: 'corrective_rag',
     createdAt: '2026-01-01T00:00:00.000Z',
-    finalDecision: 'answered',
+    finalDecision: 'answered_with_local_context',
     attempts: [
       {
         attemptNumber: 1,
+        attemptType: 'initial_local',
         seedQuery: 'What does this say?',
         generatedQueries: ['What does this say?'],
         retrievedChunkCount: 1,
         acceptedChunkCount: 1,
         rejectedChunkCount: 0,
+        assessment: {
+          status: 'correct',
+          reason: 'Local context is sufficient.',
+        },
         chunkEvaluations: [
           {
             chunkId: 'chunk-1',
@@ -66,6 +71,11 @@ function createSelfRagMetadata(
         ],
       },
     ],
+    webSearch: {
+      provider: 'tavily',
+      status: 'not_needed',
+      resultCount: 0,
+    },
     answerEvaluation: {
       verdict: 'supported',
       utility: 'high',
@@ -90,7 +100,7 @@ async function collectEvents(
 describe('ChatService', () => {
   let chatRepository: jest.Mocked<ChatRepository>;
   let documentsService: jest.Mocked<DocumentsService>;
-  let selfRagService: jest.Mocked<SelfRagService>;
+  let correctiveRagService: jest.Mocked<CorrectiveRagService>;
   let chatService: ChatService;
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const updatedAt = new Date('2026-01-01T00:00:00.000Z');
@@ -111,13 +121,13 @@ describe('ChatService', () => {
     documentsService = {
       findByIds: jest.fn(),
     } as unknown as jest.Mocked<DocumentsService>;
-    selfRagService = {
+    correctiveRagService = {
       generateAnswer: jest.fn(),
-    } as unknown as jest.Mocked<SelfRagService>;
+    } as unknown as jest.Mocked<CorrectiveRagService>;
     chatService = new ChatService(
       chatRepository,
       documentsService,
-      selfRagService,
+      correctiveRagService,
     );
   });
 
@@ -331,7 +341,7 @@ describe('ChatService', () => {
     expect(result).toEqual(message);
   });
 
-  it('delegates answer context generation to Self-RAG with selected document ids', async () => {
+  it('delegates answer context generation to Corrective RAG with selected document ids', async () => {
     const conversation = {
       id: 'conversation-1',
       userId: 'user-1',
@@ -341,7 +351,7 @@ describe('ChatService', () => {
       documentIds: ['document-1', 'document-2'],
     };
     const sources = [createChunk()];
-    const retrievalMetadata = createSelfRagMetadata();
+    const retrievalMetadata = createCorrectiveRagMetadata();
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
     chatRepository.findMessagesByConversation.mockResolvedValue([
       {
@@ -355,7 +365,7 @@ describe('ChatService', () => {
         updatedAt,
       },
     ]);
-    selfRagService.generateAnswer.mockResolvedValue({
+    correctiveRagService.generateAnswer.mockResolvedValue({
       answer: 'Answer.',
       sources,
       retrievalMetadata,
@@ -367,7 +377,7 @@ describe('ChatService', () => {
       'What does this say?',
     );
 
-    expect(selfRagService.generateAnswer).toHaveBeenCalledWith({
+    expect(correctiveRagService.generateAnswer).toHaveBeenCalledWith({
       latestUserMessage: 'What does this say?',
       historyMessages: [
         {
@@ -384,7 +394,7 @@ describe('ChatService', () => {
     });
   });
 
-  it('streams a gated Self-RAG answer with existing SSE event names', async () => {
+  it('streams a gated Corrective RAG answer with existing SSE event names', async () => {
     const conversation = {
       id: 'conversation-1',
       userId: 'user-1',
@@ -427,7 +437,7 @@ describe('ChatService', () => {
       userMessage,
     ];
     const sources = [createChunk()];
-    const retrievalMetadata = createSelfRagMetadata({
+    const retrievalMetadata = createCorrectiveRagMetadata({
       originalQuery: 'What is the current answer?',
     });
     const assistantMessage: ConversationMessage = {
@@ -443,7 +453,7 @@ describe('ChatService', () => {
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
     chatRepository.findMessageByConversation.mockResolvedValue(userMessage);
     chatRepository.findMessagesByConversation.mockResolvedValue(history);
-    selfRagService.generateAnswer.mockResolvedValue({
+    correctiveRagService.generateAnswer.mockResolvedValue({
       answer: 'Final answer.',
       sources,
       retrievalMetadata,
@@ -458,7 +468,7 @@ describe('ChatService', () => {
       ),
     );
 
-    expect(selfRagService.generateAnswer).toHaveBeenCalledWith({
+    expect(correctiveRagService.generateAnswer).toHaveBeenCalledWith({
       latestUserMessage: 'What is the current answer?',
       historyMessages: [
         {
@@ -498,7 +508,7 @@ describe('ChatService', () => {
     );
 
     expect(chatRepository.findMessageByConversation).not.toHaveBeenCalled();
-    expect(selfRagService.generateAnswer).not.toHaveBeenCalled();
+    expect(correctiveRagService.generateAnswer).not.toHaveBeenCalled();
     expect(events).toEqual([
       {
         type: 'error',
@@ -510,7 +520,7 @@ describe('ChatService', () => {
     ]);
   });
 
-  it('emits a stable stream error when Self-RAG generation fails', async () => {
+  it('emits a stable stream error when Corrective RAG generation fails', async () => {
     const conversation = {
       id: 'conversation-1',
       userId: 'user-1',
@@ -531,7 +541,7 @@ describe('ChatService', () => {
     };
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
     chatRepository.findMessageByConversation.mockResolvedValue(userMessage);
-    selfRagService.generateAnswer.mockRejectedValue(
+    correctiveRagService.generateAnswer.mockRejectedValue(
       new Error('provider key sk-test leaked in stack'),
     );
 

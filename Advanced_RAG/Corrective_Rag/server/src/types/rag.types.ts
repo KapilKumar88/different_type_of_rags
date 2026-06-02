@@ -14,10 +14,24 @@ export type VectorPoint = {
 };
 
 export type RetrievedChunk = ChunkPayload & {
+  sourceType?: 'document';
   score: number;
 };
 
-export type RetrievalStrategy = 'multi_query' | 'self_rag';
+export type WebSearchSource = {
+  sourceType: 'web';
+  sourceId: string;
+  title: string;
+  url: string;
+  content: string;
+  score: number;
+  provider: 'tavily';
+  createdAt: string;
+};
+
+export type RetrievedSource = RetrievedChunk | WebSearchSource;
+
+export type RetrievalStrategy = 'multi_query' | 'self_rag' | 'corrective_rag';
 
 export type MultiQueryRetrievalMetadata = {
   originalQuery: string;
@@ -84,6 +98,78 @@ export type SelfRagRetrievalMetadata = {
   answerEvaluation: SelfRagAnswerEvaluation;
 };
 
+export type CorrectiveRagRetrievalStatus =
+  | 'correct'
+  | 'ambiguous'
+  | 'incorrect'
+  | 'not_evaluated';
+
+export type CorrectiveRagFinalDecision =
+  | 'answered_with_local_context'
+  | 'answered_with_corrected_context'
+  | 'answered_with_web_context'
+  | 'insufficient_context'
+  | 'unsupported_answer'
+  | 'evaluation_degraded';
+
+export type CorrectiveRagAttemptType = 'initial_local' | 'corrective_local';
+
+export type CorrectiveRagWebSearchStatus =
+  | 'not_needed'
+  | 'disabled'
+  | 'searched'
+  | 'no_results'
+  | 'failed';
+
+export type CorrectiveRagChunkEvaluation = SelfRagChunkEvaluation;
+
+export type CorrectiveRagChunkRelevanceVerdict = SelfRagChunkRelevanceVerdict;
+
+export type CorrectiveRagAnswerSupportVerdict = SelfRagAnswerSupportVerdict;
+
+export type CorrectiveRagAnswerUtility = SelfRagAnswerUtility;
+
+export type CorrectiveRagAnswerEvaluation = SelfRagAnswerEvaluation;
+
+export type CorrectiveRagRetrievalAssessment = {
+  status: CorrectiveRagRetrievalStatus;
+  reason: string;
+};
+
+export type CorrectiveRagAttemptTrace = {
+  attemptNumber: number;
+  attemptType: CorrectiveRagAttemptType;
+  seedQuery: string;
+  generatedQueries: string[];
+  retrievedChunkCount: number;
+  acceptedChunkCount: number;
+  rejectedChunkCount: number;
+  correctiveQuery?: string;
+  assessment: CorrectiveRagRetrievalAssessment;
+  chunkEvaluations: CorrectiveRagChunkEvaluation[];
+};
+
+export type CorrectiveRagWebSearchTrace = {
+  provider: 'tavily';
+  status: CorrectiveRagWebSearchStatus;
+  query?: string;
+  resultCount: number;
+  reason?: string;
+};
+
+export type CorrectiveRagRetrievalMetadata = {
+  originalQuery: string;
+  generatedQueries: string[];
+  usedQueryCount: number;
+  strategy: 'corrective_rag';
+  createdAt: string;
+  finalDecision: CorrectiveRagFinalDecision;
+  attempts: CorrectiveRagAttemptTrace[];
+  webSearch: CorrectiveRagWebSearchTrace;
+  answerEvaluation: CorrectiveRagAnswerEvaluation;
+};
+
 export type RetrievalMetadata =
   | MultiQueryRetrievalMetadata
-  | SelfRagRetrievalMetadata;
+  | SelfRagRetrievalMetadata
+  | CorrectiveRagRetrievalMetadata;

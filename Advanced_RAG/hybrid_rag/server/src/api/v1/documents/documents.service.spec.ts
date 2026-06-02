@@ -3,6 +3,7 @@ import { documentUploadConfig } from '../../../config/document-upload.config';
 import type { Document } from '../../../database/schemas';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
+import { SparseVectorizerService } from '../../../services/rag-retrieval/sparse-vectorizer.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
 import { DocumentsRepository } from './documents.repository';
 import {
@@ -45,6 +46,7 @@ describe('DocumentsService', () => {
   let embeddingsService: jest.Mocked<EmbeddingsService>;
   let qdrantService: jest.Mocked<QdrantService>;
   let documentParsingService: jest.Mocked<DocumentParsingService>;
+  let sparseVectorizerService: jest.Mocked<SparseVectorizerService>;
   let ragConcurrencyLimiter: jest.Mocked<RagConcurrencyLimiterService>;
   let documentsService: DocumentsService;
 
@@ -61,6 +63,7 @@ describe('DocumentsService', () => {
     } as unknown as jest.Mocked<EmbeddingsService>;
     qdrantService = {
       upsertPoints: jest.fn(),
+      updateSparseVectors: jest.fn(),
       deleteByDocumentId: jest.fn(),
     } as unknown as jest.Mocked<QdrantService>;
     documentParsingService = {
@@ -76,6 +79,10 @@ describe('DocumentsService', () => {
         }),
       ),
     } as unknown as jest.Mocked<DocumentParsingService>;
+    sparseVectorizerService = {
+      vectorize: jest.fn(() => ({ indices: [101], values: [1] })),
+      tokenize: jest.fn(),
+    } as unknown as jest.Mocked<SparseVectorizerService>;
     ragConcurrencyLimiter = {
       run: jest.fn(async (_key, task: () => Promise<unknown>) => task()),
     } as unknown as jest.Mocked<RagConcurrencyLimiterService>;
@@ -84,6 +91,7 @@ describe('DocumentsService', () => {
       embeddingsService,
       qdrantService,
       documentParsingService,
+      sparseVectorizerService,
       ragConcurrencyLimiter,
     );
   });
@@ -109,7 +117,17 @@ describe('DocumentsService', () => {
         payload: expect.objectContaining({
           fileName: 'rag-notes.txt',
           text: 'Naive RAG retrieves chunks from Qdrant.',
+          sparseIndexed: true,
         }),
+      }),
+    ]);
+    expect(sparseVectorizerService.vectorize).toHaveBeenCalledWith(
+      'Naive RAG retrieves chunks from Qdrant.',
+    );
+    expect(qdrantService.updateSparseVectors).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: expect.any(String),
+        sparseVector: { indices: [101], values: [1] },
       }),
     ]);
     expect(documentsRepository.create).toHaveBeenCalledWith(
@@ -159,6 +177,21 @@ describe('DocumentsService', () => {
     expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(documentId);
   });
 
+  it('cleans up uploaded vectors when sparse vector update fails', async () => {
+    const sparseError = new Error('sparse vector update failed');
+    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
+    qdrantService.updateSparseVectors.mockRejectedValue(sparseError);
+
+    await expect(
+      documentsService.upload('user-1', createFile()),
+    ).rejects.toThrow(sparseError);
+
+    const upsertedPoints = qdrantService.upsertPoints.mock.calls[0]?.[0];
+    const documentId = upsertedPoints?.[0]?.payload.documentId;
+    expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(documentId);
+    expect(documentsRepository.create).not.toHaveBeenCalled();
+  });
+
   it('does not create metadata when Qdrant upsert fails', async () => {
     const qdrantError = new Error('qdrant unavailable');
     embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
@@ -169,6 +202,7 @@ describe('DocumentsService', () => {
     ).rejects.toThrow(qdrantError);
 
     expect(documentsRepository.create).not.toHaveBeenCalled();
+    expect(qdrantService.updateSparseVectors).not.toHaveBeenCalled();
     expect(qdrantService.deleteByDocumentId).not.toHaveBeenCalled();
   });
 

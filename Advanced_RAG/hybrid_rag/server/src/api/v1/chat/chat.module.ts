@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { DocumentsModule } from '../documents/documents.module';
 import { EmbeddingsModule } from '../../../services/embeddings/embeddings.module';
 import { LlmModule } from '../../../services/llm/llm.module';
-import { QdrantModule } from '../../../services/qdrant/qdrant.module';
+import { RagRetrievalModule } from '../../../services/rag-retrieval/rag-retrieval.module';
 import { RagRuntimeModule } from '../../../services/rag-runtime/rag-runtime.module';
 import { ChatController } from './chat.controller';
 import { ChatRepository } from './chat.repository';
@@ -13,7 +13,7 @@ import { ChatService } from './chat.service';
     DocumentsModule,
     EmbeddingsModule,
     LlmModule,
-    QdrantModule,
+    RagRetrievalModule,
     RagRuntimeModule,
   ],
   controllers: [ChatController],

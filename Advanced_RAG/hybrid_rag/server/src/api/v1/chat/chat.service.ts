@@ -10,7 +10,7 @@ import type { RetrievedChunk } from '../../../types/rag.types';
 import { DocumentsService } from '../documents/documents.service';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { LlmService } from '../../../services/llm/llm.service';
-import { QdrantService } from '../../../services/qdrant/qdrant.service';
+import { HybridRetrieverService } from '../../../services/rag-retrieval/hybrid-retriever.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
 import {
   ChatRepository,
@@ -62,11 +62,11 @@ Answer:`;
 export class ChatService {
   constructor(
     private readonly embeddingsService: EmbeddingsService,
-    private readonly qdrantService: QdrantService,
     private readonly llmService: LlmService,
     private readonly chatRepository: ChatRepository,
     private readonly documentsService: DocumentsService,
     private readonly ragConcurrencyLimiter: RagConcurrencyLimiterService,
+    private readonly hybridRetrieverService: HybridRetrieverService,
   ) {}
 
   listConversations(userId: string): Promise<ConversationSummary[]> {
@@ -270,11 +270,12 @@ export class ChatService {
     );
 
     return this.ragConcurrencyLimiter.run('qdrant-search', () =>
-      this.qdrantService.searchByDocumentIds(
-        questionVector,
-        ragConfig.topK,
-        conversation.documentIds,
-      ),
+      this.hybridRetrieverService.retrieveByDocumentIds({
+        denseVector: questionVector,
+        query: question,
+        documentIds: conversation.documentIds,
+        limit: ragConfig.topK,
+      }),
     );
   }
 

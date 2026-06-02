@@ -9,8 +9,9 @@ import { documentUploadConfig } from '../../../config/document-upload.config';
 import type { Document } from '../../../database/schemas';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
+import { SparseVectorizerService } from '../../../services/rag-retrieval/sparse-vectorizer.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
-import type { VectorPoint } from '../../../types/rag.types';
+import type { SparseVectorPoint, VectorPoint } from '../../../types/rag.types';
 import { DocumentsRepository } from './documents.repository';
 import { splitDocumentText } from './helpers/text-splitter';
 import { DocumentParsingService } from '../../../services/parsing/document-parsing.service';
@@ -31,6 +32,7 @@ export class DocumentsService {
     private readonly embeddingsService: EmbeddingsService,
     private readonly qdrantService: QdrantService,
     private readonly documentParsingService: DocumentParsingService,
+    private readonly sparseVectorizerService: SparseVectorizerService,
     private readonly ragConcurrencyLimiter: RagConcurrencyLimiterService,
   ) {}
 
@@ -73,6 +75,9 @@ export class DocumentsService {
 
     const createdAt = new Date().toISOString();
     const documentId = randomUUID();
+    const sparseVectors = chunks.map((chunk) =>
+      this.sparseVectorizerService.vectorize(chunk.text),
+    );
 
     // 3. Generate embeddings for every chunk.
     const vectors = await this.ragConcurrencyLimiter.run('embedding', () =>
@@ -82,12 +87,14 @@ export class DocumentsService {
     // 4. Store each chunk embedding and its payload as one Qdrant point.
     const points: VectorPoint[] = chunks.map((chunk, index) => {
       const chunkId = randomUUID();
+      const sparseVector = sparseVectors[index];
       const payload = {
         chunkId,
         documentId,
         fileName: file.originalname,
         text: chunk.text,
         createdAt,
+        sparseIndexed: sparseVector ? sparseVector.indices.length > 0 : false,
         ...(chunk.pageNumber === undefined
           ? {}
           : { pageNumber: chunk.pageNumber }),
@@ -99,10 +106,28 @@ export class DocumentsService {
         payload,
       };
     });
+    const sparsePoints: SparseVectorPoint[] = points.flatMap((point, index) => {
+      const sparseVector = sparseVectors[index];
+
+      if (!sparseVector || sparseVector.indices.length === 0) {
+        return [];
+      }
+
+      return [{ id: point.id, sparseVector }];
+    });
 
     await this.ragConcurrencyLimiter.run('qdrant-write', () =>
       this.qdrantService.upsertPoints(points),
     );
+
+    try {
+      await this.ragConcurrencyLimiter.run('qdrant-write', () =>
+        this.qdrantService.updateSparseVectors(sparsePoints),
+      );
+    } catch (error) {
+      await this.cleanupUploadedVectors(documentId);
+      throw error;
+    }
 
     try {
       // 5. Persist document-level metadata for listing and deletion.

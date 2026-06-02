@@ -1,3 +1,5 @@
+export type RetrievalMode = "dense" | "sparse" | "hybrid";
+
 export type SourceChunk = {
   chunkId: string;
   documentId: string;
@@ -5,6 +7,12 @@ export type SourceChunk = {
   text: string;
   pageNumber?: number;
   score: number;
+  retrievalMode?: RetrievalMode;
+  denseScore?: number;
+  sparseScore?: number;
+  denseRank?: number;
+  sparseRank?: number;
+  sparseIndexed?: boolean;
   createdAt: string;
 };
 

@@ -5,7 +5,7 @@ import type { RetrievedChunk } from '../../../types/rag.types';
 import { DocumentsService } from '../documents/documents.service';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { LlmService } from '../../../services/llm/llm.service';
-import { QdrantService } from '../../../services/qdrant/qdrant.service';
+import { HybridRetrieverService } from '../../../services/rag-retrieval/hybrid-retriever.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
 import { ChatRepository } from './chat.repository';
 import { ChatService } from './chat.service';
@@ -58,7 +58,7 @@ async function collectEvents(
 
 describe('ChatService', () => {
   let embeddingsService: jest.Mocked<EmbeddingsService>;
-  let qdrantService: jest.Mocked<QdrantService>;
+  let hybridRetrieverService: jest.Mocked<HybridRetrieverService>;
   let llmService: jest.Mocked<LlmService>;
   let chatRepository: jest.Mocked<ChatRepository>;
   let documentsService: jest.Mocked<DocumentsService>;
@@ -71,9 +71,10 @@ describe('ChatService', () => {
     embeddingsService = {
       embedQuery: jest.fn(),
     } as unknown as jest.Mocked<EmbeddingsService>;
-    qdrantService = {
-      searchByDocumentIds: jest.fn(),
-    } as unknown as jest.Mocked<QdrantService>;
+    hybridRetrieverService = {
+      retrieveByDocumentIds: jest.fn(),
+      fuseResults: jest.fn(),
+    } as unknown as jest.Mocked<HybridRetrieverService>;
     llmService = {
       generateAnswer: jest.fn(),
       streamAnswer: jest.fn(),
@@ -105,11 +106,11 @@ describe('ChatService', () => {
     } as unknown as jest.Mocked<RagConcurrencyLimiterService>;
     chatService = new ChatService(
       embeddingsService,
-      qdrantService,
       llmService,
       chatRepository,
       documentsService,
       ragConcurrencyLimiter,
+      hybridRetrieverService,
     );
   });
 
@@ -547,7 +548,7 @@ describe('ChatService', () => {
     ];
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
     embeddingsService.embedQuery.mockResolvedValue(questionVector);
-    qdrantService.searchByDocumentIds.mockResolvedValue(sources);
+    hybridRetrieverService.retrieveByDocumentIds.mockResolvedValue(sources);
 
     const result = await chatService.getConversationAnswerContext(
       'user-1',
@@ -555,11 +556,12 @@ describe('ChatService', () => {
       'What does this say?',
     );
 
-    expect(qdrantService.searchByDocumentIds).toHaveBeenCalledWith(
-      questionVector,
-      ragConfig.topK,
-      ['document-1', 'document-2'],
-    );
+    expect(hybridRetrieverService.retrieveByDocumentIds).toHaveBeenCalledWith({
+      denseVector: questionVector,
+      query: 'What does this say?',
+      documentIds: ['document-1', 'document-2'],
+      limit: ragConfig.topK,
+    });
     expect(result).toEqual({
       conversation,
       sources,
@@ -605,7 +607,16 @@ describe('ChatService', () => {
       },
       userMessage,
     ];
-    const sources = [createChunk({ documentId: 'document-1' })];
+    const sources = [
+      createChunk({
+        documentId: 'document-1',
+        retrievalMode: 'hybrid',
+        denseScore: 0.91,
+        sparseScore: 0.72,
+        denseRank: 1,
+        sparseRank: 2,
+      }),
+    ];
     const assistantMessage: ConversationMessage = {
       id: 'message-4',
       conversationId: 'conversation-1',
@@ -619,7 +630,7 @@ describe('ChatService', () => {
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
     chatRepository.findMessagesByConversation.mockResolvedValue(history);
     embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
-    qdrantService.searchByDocumentIds.mockResolvedValue(sources);
+    hybridRetrieverService.retrieveByDocumentIds.mockResolvedValue(sources);
     llmService.streamAnswer.mockReturnValue(
       createTokenStream(['Final ', 'answer.']),
     );
@@ -697,7 +708,7 @@ describe('ChatService', () => {
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
     chatRepository.findMessagesByConversation.mockResolvedValue([userMessage]);
     embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
-    qdrantService.searchByDocumentIds.mockResolvedValue([source]);
+    hybridRetrieverService.retrieveByDocumentIds.mockResolvedValue([source]);
     llmService.streamAnswer.mockReturnValue(
       createTokenStream(['RAG retrieves context.']),
     );
@@ -781,7 +792,7 @@ describe('ChatService', () => {
       latestMessage,
     ]);
     embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
-    qdrantService.searchByDocumentIds.mockResolvedValue([source]);
+    hybridRetrieverService.retrieveByDocumentIds.mockResolvedValue([source]);
     llmService.streamAnswer.mockReturnValue(createTokenStream(['Answer.']));
     chatRepository.createMessage.mockResolvedValue(assistantMessage);
 
@@ -835,7 +846,7 @@ describe('ChatService', () => {
     chatRepository.findMessageByConversation.mockResolvedValue(userMessage);
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
     embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
-    qdrantService.searchByDocumentIds.mockResolvedValue([]);
+    hybridRetrieverService.retrieveByDocumentIds.mockResolvedValue([]);
     chatRepository.createMessage.mockResolvedValue(assistantMessage);
 
     const events = await collectEvents(
@@ -892,7 +903,7 @@ describe('ChatService', () => {
     chatRepository.findConversationForUser.mockResolvedValue(conversation);
     chatRepository.findMessagesByConversation.mockResolvedValue([userMessage]);
     embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
-    qdrantService.searchByDocumentIds.mockResolvedValue(sources);
+    hybridRetrieverService.retrieveByDocumentIds.mockResolvedValue(sources);
     llmService.streamAnswer.mockReturnValue(createTokenStream([]));
     chatRepository.createMessage.mockResolvedValue(assistantMessage);
 
@@ -1045,7 +1056,7 @@ describe('ChatService', () => {
     chatRepository.findMessageByConversation.mockResolvedValue(userMessage);
     chatRepository.findMessagesByConversation.mockResolvedValue([userMessage]);
     embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
-    qdrantService.searchByDocumentIds.mockResolvedValue(sources);
+    hybridRetrieverService.retrieveByDocumentIds.mockResolvedValue(sources);
     llmService.streamAnswer.mockReturnValue(failingTokenStream());
 
     const events = await collectEvents(

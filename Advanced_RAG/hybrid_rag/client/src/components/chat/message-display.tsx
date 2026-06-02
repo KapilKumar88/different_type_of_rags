@@ -172,8 +172,8 @@ function SourceChunks({ sources }: Readonly<{ sources: SourceChunk[] }>) {
           <Badge key={source.chunkId} variant="secondary" className="gap-1 font-normal">
             <FileText className="h-3 w-3" />
             {source.fileName}
-            {source.pageNumber ? ` · p.${source.pageNumber}` : ""}
-            {` · ${source.score.toFixed(3)}`}
+            {source.pageNumber !== undefined ? ` · p.${source.pageNumber}` : ""}
+            {` · ${getRetrievalModeLabel(source)} · fused ${formatScore(source.score)}`}
           </Badge>
         ))}
       </div>
@@ -182,8 +182,9 @@ function SourceChunks({ sources }: Readonly<{ sources: SourceChunk[] }>) {
           <details key={source.chunkId} className="rounded-lg border border-border bg-muted/30 p-3">
             <summary className="cursor-pointer text-xs font-medium text-foreground">
               Source {index + 1}: {source.fileName}
-              {source.pageNumber ? ` · page ${source.pageNumber}` : ""}
+              {source.pageNumber !== undefined ? ` · page ${source.pageNumber}` : ""}
             </summary>
+            <SourceDiagnostics source={source} />
             <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
               {source.text}
             </p>
@@ -192,6 +193,75 @@ function SourceChunks({ sources }: Readonly<{ sources: SourceChunk[] }>) {
       </div>
     </div>
   );
+}
+
+function SourceDiagnostics({ source }: Readonly<{ source: SourceChunk }>) {
+  return (
+    <div className="mt-3 grid gap-2 text-[11px] sm:grid-cols-2 lg:grid-cols-4">
+      <DiagnosticMetric label="Mode" value={getRetrievalModeLabel(source)} />
+      <DiagnosticMetric label="Fused" value={formatScore(source.score)} />
+      <DiagnosticMetric
+        label="Dense"
+        value={formatScoreWithRank(source.denseScore, source.denseRank)}
+      />
+      <DiagnosticMetric
+        label="Sparse"
+        value={formatScoreWithRank(source.sparseScore, source.sparseRank)}
+      />
+    </div>
+  );
+}
+
+function DiagnosticMetric({ label, value }: Readonly<{ label: string; value: string }>) {
+  return (
+    <div className="min-w-0 border-l border-border pl-2">
+      <div className="truncate text-[10px] uppercase text-muted-foreground">{label}</div>
+      <div className="truncate font-medium text-foreground">{value}</div>
+    </div>
+  );
+}
+
+function getRetrievalModeLabel(source: SourceChunk): string {
+  if (source.retrievalMode === "hybrid") {
+    return "hybrid";
+  }
+
+  if (source.retrievalMode === "sparse") {
+    return "sparse";
+  }
+
+  return "dense";
+}
+
+function formatScore(value: number): string {
+  return value.toFixed(3);
+}
+
+function formatOptionalScore(value: number | undefined): string {
+  if (value === undefined) {
+    return "n/a";
+  }
+
+  return value.toFixed(3);
+}
+
+function formatOptionalRank(value: number | undefined): string {
+  if (value === undefined) {
+    return "";
+  }
+
+  return `#${value}`;
+}
+
+function formatScoreWithRank(score: number | undefined, rank: number | undefined): string {
+  const formattedScore = formatOptionalScore(score);
+  const formattedRank = formatOptionalRank(rank);
+
+  if (!formattedRank) {
+    return formattedScore;
+  }
+
+  return `${formattedScore} ${formattedRank}`;
 }
 
 function StreamingDots() {

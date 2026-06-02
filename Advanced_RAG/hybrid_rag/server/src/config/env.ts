@@ -32,10 +32,20 @@ const envSchema = z
     QDRANT_URL: z.url().default('http://localhost:6333'),
     QDRANT_COLLECTION: z.string().min(1).default('documents'),
     QDRANT_VECTOR_SIZE: z.coerce.number().int().positive().default(768),
+    QDRANT_SPARSE_VECTOR_NAME: z.string().min(1).default('text_sparse'),
     OLLAMA_BASE_URL: z.url().default('http://localhost:11434'),
     OLLAMA_EMBEDDING_MODEL: z.string().min(1).default('nomic-embed-text:v1.5'),
     OLLAMA_LLM_MODEL: z.string().min(1).default('minimax-m2.5:cloud'),
     RAG_TOP_K: z.coerce.number().int().positive().default(5),
+    RAG_HYBRID_CANDIDATE_LIMIT: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(20),
+    RAG_HYBRID_RRF_K: z.coerce.number().int().positive().default(60),
+    RAG_HYBRID_DENSE_WEIGHT: z.coerce.number().positive().default(1),
+    RAG_HYBRID_SPARSE_WEIGHT: z.coerce.number().positive().default(1),
+    RAG_SPARSE_MAX_FEATURES: z.coerce.number().int().positive().default(256),
     RAG_UPLOAD_RATE_LIMIT_TTL_MS: z.coerce
       .number()
       .int()

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" suppresshydrationwarning>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Upload documents and chat with an AI assistant grounded in your data."
+    />
+    <meta name="author" content="RAG Assistant" />
+    <meta property="og:title" content="RAG Assistant" />
+    <meta
+      property="og:description"
+      content="Upload documents and chat with an AI assistant grounded in your data."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    <title>RAG Assistant - Chat with your documents</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("rag-theme") || "system";
+          var d =
+            t === "dark" ||
+            (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (d) document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = d ? "dark" : "light";
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -32,10 +32,15 @@ const envSchema = z
     QDRANT_URL: z.url().default('http://localhost:6333'),
     QDRANT_COLLECTION: z.string().min(1).default('documents'),
     QDRANT_VECTOR_SIZE: z.coerce.number().int().positive().default(768),
+    QDRANT_IMAGE_COLLECTION: z.string().min(1).default('image_vectors'),
+    QDRANT_IMAGE_VECTOR_SIZE: z.coerce.number().int().positive().default(512),
     OLLAMA_BASE_URL: z.url().default('http://localhost:11434'),
     OLLAMA_EMBEDDING_MODEL: z.string().min(1).default('nomic-embed-text:v1.5'),
     OLLAMA_LLM_MODEL: z.string().min(1).default('minimax-m2.5:cloud'),
+    OLLAMA_VISION_MODEL: z.string().min(1).default('llama3.2-vision'),
+    CLIP_MODEL: z.string().min(1).default('Xenova/clip-vit-base-patch32'),
     RAG_TOP_K: z.coerce.number().int().positive().default(5),
+    RAG_IMAGE_TOP_K: z.coerce.number().int().positive().default(3),
     RAG_UPLOAD_RATE_LIMIT_TTL_MS: z.coerce
       .number()
       .int()

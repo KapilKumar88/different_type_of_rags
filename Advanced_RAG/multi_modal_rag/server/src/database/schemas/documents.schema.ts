@@ -19,6 +19,7 @@ export const documents = pgTable(
     mimeType: varchar('mime_type', { length: 120 }).notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     chunkCount: integer('chunk_count').notNull(),
+    imageCount: integer('image_count').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

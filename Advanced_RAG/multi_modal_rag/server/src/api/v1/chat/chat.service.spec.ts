@@ -1,12 +1,18 @@
 import { ragConfig } from '../../../config/rag.config';
 import type { MessageEvent } from '@nestjs/common';
 import type { ConversationMessage, Document } from '../../../database/schemas';
-import type { RetrievedChunk } from '../../../types/rag.types';
+import type {
+  RetrievedChunk,
+  RetrievedImage,
+  RetrievedSource,
+} from '../../../types/rag.types';
 import { DocumentsService } from '../documents/documents.service';
+import { ClipEmbeddingsService } from '../../../services/clip-embeddings/clip-embeddings.service';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { LlmService } from '../../../services/llm/llm.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
+import { VisionService } from '../../../services/vision/vision.service';
 import { ChatRepository } from './chat.repository';
 import { ChatService } from './chat.service';
 import { updateConversationDocumentsSchema } from './dto/update-conversation-documents.dto';
@@ -20,6 +26,29 @@ function createChunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
     text: 'Naive RAG retrieves the most similar chunks before calling the LLM.',
     createdAt: '2026-01-01T00:00:00.000Z',
     score: 0.91,
+    ...overrides,
+  };
+}
+
+function asTextSource(chunk: RetrievedChunk): RetrievedSource {
+  return { modality: 'text', ...chunk };
+}
+
+function asTextSources(chunks: RetrievedChunk[]): RetrievedSource[] {
+  return chunks.map(asTextSource);
+}
+
+function createImageRecord(
+  overrides: Partial<RetrievedImage> = {},
+): RetrievedImage {
+  return {
+    imageId: 'image-1',
+    documentId: 'document-1',
+    fileName: 'diagram.png',
+    source: 'upload',
+    caption: 'A retrieval pipeline diagram',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    score: 0.88,
     ...overrides,
   };
 }
@@ -58,8 +87,10 @@ async function collectEvents(
 
 describe('ChatService', () => {
   let embeddingsService: jest.Mocked<EmbeddingsService>;
+  let clipEmbeddingsService: jest.Mocked<ClipEmbeddingsService>;
   let qdrantService: jest.Mocked<QdrantService>;
   let llmService: jest.Mocked<LlmService>;
+  let visionService: jest.Mocked<VisionService>;
   let chatRepository: jest.Mocked<ChatRepository>;
   let documentsService: jest.Mocked<DocumentsService>;
   let ragConcurrencyLimiter: jest.Mocked<RagConcurrencyLimiterService>;
@@ -71,13 +102,22 @@ describe('ChatService', () => {
     embeddingsService = {
       embedQuery: jest.fn(),
     } as unknown as jest.Mocked<EmbeddingsService>;
+    clipEmbeddingsService = {
+      embedText: jest.fn().mockResolvedValue(Array(512).fill(0.2)),
+      embedImage: jest.fn(),
+    } as unknown as jest.Mocked<ClipEmbeddingsService>;
     qdrantService = {
       searchByDocumentIds: jest.fn(),
+      searchImagesByDocumentIds: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<QdrantService>;
     llmService = {
       generateAnswer: jest.fn(),
       streamAnswer: jest.fn(),
     } as unknown as jest.Mocked<LlmService>;
+    visionService = {
+      streamAnswer: jest.fn(),
+      describeImage: jest.fn(),
+    } as unknown as jest.Mocked<VisionService>;
     chatRepository = {
       createConversation: jest.fn(),
       updateConversationTitle: jest.fn(),
@@ -91,6 +131,7 @@ describe('ChatService', () => {
     } as unknown as jest.Mocked<ChatRepository>;
     documentsService = {
       findByIds: jest.fn(),
+      getImagesForUser: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<DocumentsService>;
     ragConcurrencyLimiter = {
       run: jest.fn(async (_key, task: () => Promise<unknown>) => task()),
@@ -105,8 +146,10 @@ describe('ChatService', () => {
     } as unknown as jest.Mocked<RagConcurrencyLimiterService>;
     chatService = new ChatService(
       embeddingsService,
+      clipEmbeddingsService,
       qdrantService,
       llmService,
+      visionService,
       chatRepository,
       documentsService,
       ragConcurrencyLimiter,
@@ -560,9 +603,14 @@ describe('ChatService', () => {
       ragConfig.topK,
       ['document-1', 'document-2'],
     );
+    expect(qdrantService.searchImagesByDocumentIds).toHaveBeenCalledWith(
+      Array(512).fill(0.2),
+      ragConfig.imageTopK,
+      ['document-1', 'document-2'],
+    );
     expect(result).toEqual({
       conversation,
-      sources,
+      sources: asTextSources(sources),
     });
   });
 
@@ -653,10 +701,10 @@ describe('ChatService', () => {
       conversationId: 'conversation-1',
       role: 'assistant',
       content: 'Final answer.',
-      sources,
+      sources: asTextSources(sources),
     });
     expect(events).toEqual([
-      { type: 'sources', data: { sources } },
+      { type: 'sources', data: { sources: asTextSources(sources) } },
       { type: 'token', data: { token: 'Final ' } },
       { type: 'token', data: { token: 'answer.' } },
       { type: 'done', data: { message: assistantMessage } },
@@ -908,10 +956,10 @@ describe('ChatService', () => {
       conversationId: 'conversation-1',
       role: 'assistant',
       content: ragConfig.fallbackAnswer,
-      sources,
+      sources: asTextSources(sources),
     });
     expect(events).toEqual([
-      { type: 'sources', data: { sources } },
+      { type: 'sources', data: { sources: asTextSources(sources) } },
       { type: 'token', data: { token: ragConfig.fallbackAnswer } },
       { type: 'done', data: { message: assistantMessage } },
     ]);
@@ -1057,7 +1105,7 @@ describe('ChatService', () => {
     );
 
     expect(events).toEqual([
-      { type: 'sources', data: { sources } },
+      { type: 'sources', data: { sources: asTextSources(sources) } },
       {
         type: 'error',
         data: {
@@ -1068,5 +1116,81 @@ describe('ChatService', () => {
     ]);
     expect(JSON.stringify(events)).not.toContain('sk-test');
     expect(chatRepository.createMessage).not.toHaveBeenCalled();
+  });
+
+  it('routes generation through the vision model when image sources are retrieved', async () => {
+    const conversation = {
+      id: 'conversation-1',
+      userId: 'user-1',
+      title: 'Project docs',
+      createdAt,
+      updatedAt,
+      documentIds: ['document-1'],
+    };
+    const userMessage: ConversationMessage = {
+      id: 'message-1',
+      conversationId: 'conversation-1',
+      role: 'user',
+      content: 'What does the diagram show?',
+      sources: null,
+      createdAt,
+      updatedAt,
+    };
+    const image = createImageRecord();
+    const expectedSources: RetrievedSource[] = [{ modality: 'image', ...image }];
+    const assistantMessage: ConversationMessage = {
+      id: 'message-2',
+      conversationId: 'conversation-1',
+      role: 'assistant',
+      content: 'It shows a pipeline.',
+      sources: expectedSources,
+      createdAt,
+      updatedAt,
+    };
+    chatRepository.findMessageByConversation.mockResolvedValue(userMessage);
+    chatRepository.findConversationForUser.mockResolvedValue(conversation);
+    chatRepository.findMessagesByConversation.mockResolvedValue([userMessage]);
+    embeddingsService.embedQuery.mockResolvedValue(Array(768).fill(0.4));
+    qdrantService.searchByDocumentIds.mockResolvedValue([]);
+    qdrantService.searchImagesByDocumentIds.mockResolvedValue([image]);
+    documentsService.getImagesForUser.mockResolvedValue([
+      {
+        data: Buffer.from('image-bytes'),
+        mimeType: 'image/png',
+      },
+    ] as unknown as Awaited<
+      ReturnType<DocumentsService['getImagesForUser']>
+    >);
+    visionService.streamAnswer.mockReturnValue(
+      createTokenStream(['It shows ', 'a pipeline.']),
+    );
+    chatRepository.createMessage.mockResolvedValue(assistantMessage);
+
+    const events = await collectEvents(
+      chatService.streamConversationAnswer(
+        'user-1',
+        'conversation-1',
+        'message-1',
+      ),
+    );
+
+    expect(documentsService.getImagesForUser).toHaveBeenCalledWith('user-1', [
+      'image-1',
+    ]);
+    expect(visionService.streamAnswer).toHaveBeenCalledWith(
+      expect.stringContaining('A retrieval pipeline diagram'),
+      [{ data: Buffer.from('image-bytes'), mimeType: 'image/png' }],
+    );
+    expect(llmService.streamAnswer).not.toHaveBeenCalled();
+    expect(events[0]).toEqual({
+      type: 'sources',
+      data: { sources: expectedSources },
+    });
+    expect(chatRepository.createMessage).toHaveBeenCalledWith({
+      conversationId: 'conversation-1',
+      role: 'assistant',
+      content: 'It shows a pipeline.',
+      sources: expectedSources,
+    });
   });
 });

@@ -9,6 +9,7 @@ import type {
   ParsedDocument,
 } from '../../types/document-parsing.types';
 import { DocxDocumentParser } from './parsers/docx-document.parser';
+import { ImageDocumentParser } from './parsers/image-document.parser';
 import { PdfDocumentParser } from './parsers/pdf-document.parser';
 import { PlainTextDocumentParser } from './parsers/plain-text-document.parser';
 import {
@@ -27,11 +28,13 @@ export class DocumentParsingService {
     plainTextDocumentParser: PlainTextDocumentParser,
     pdfDocumentParser: PdfDocumentParser,
     docxDocumentParser: DocxDocumentParser,
+    imageDocumentParser: ImageDocumentParser,
   ) {
     const parsers: DocumentParser[] = [
       plainTextDocumentParser,
       pdfDocumentParser,
       docxDocumentParser,
+      imageDocumentParser,
     ];
 
     this.parserByExtension = new Map(
@@ -99,7 +102,7 @@ export class DocumentParsingService {
 
     if (!this.isSupportedExtension(extension)) {
       throw new BadRequestException(
-        'Unsupported file type. Upload .txt, .md, .csv, .pdf, or .docx files.',
+        'Unsupported file type. Upload .txt, .md, .csv, .pdf, .docx, .png, .jpg, .jpeg, or .webp files.',
       );
     }
 
@@ -111,7 +114,7 @@ export class DocumentParsingService {
 
     if (!parser) {
       throw new BadRequestException(
-        'Unsupported file type. Upload .txt, .md, .csv, .pdf, or .docx files.',
+        'Unsupported file type. Upload .txt, .md, .csv, .pdf, .docx, .png, .jpg, .jpeg, or .webp files.',
       );
     }
 

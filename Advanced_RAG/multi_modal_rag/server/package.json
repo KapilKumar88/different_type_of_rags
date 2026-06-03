@@ -23,6 +23,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@langchain/ollama": "^1.2.7",
     "@langchain/textsplitters": "^1.0.1",
     "@nestjs/common": "^11.0.1",
@@ -42,6 +43,7 @@
     "postgres": "^3.4.9",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "sharp": "^0.34.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -16,6 +16,7 @@ export class PlainTextDocumentParser implements DocumentParser {
   async parse(input: DocumentParseInput): Promise<ParsedDocument> {
     return {
       pages: [{ text: input.buffer.toString('utf8') }],
+      images: [],
     };
   }
 }

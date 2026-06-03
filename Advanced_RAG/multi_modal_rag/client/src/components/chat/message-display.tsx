@@ -1,13 +1,26 @@
-import { Copy, FileText, MessageSquarePlus, Plus, RefreshCw, Sparkles } from "lucide-react";
+import {
+  Copy,
+  FileText,
+  Image as ImageIcon,
+  MessageSquarePlus,
+  Plus,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/chat/markdown";
 import { suggestedPrompts } from "@/components/chat/chat.constants";
 import { formatRelativeTime } from "@/components/chat/chat.helpers";
-import type { SourceChunk } from "@/types/chat.types";
+import { apiConfig } from "@/config/api.config";
+import type { ChatSource, ImageSource, TextSource } from "@/types/chat.types";
 import type { ChatMessage } from "@/types/chat-ui.types";
 import { toast } from "sonner";
+
+function isImageSource(source: ChatSource): source is ImageSource {
+  return source.modality === "image";
+}
 
 export function MessageRow({
   message,
@@ -163,23 +176,67 @@ export function EmptyState({
   );
 }
 
-function SourceChunks({ sources }: Readonly<{ sources: SourceChunk[] }>) {
+function sourceKey(source: ChatSource, index: number): string {
+  return isImageSource(source) ? source.imageId : `${source.chunkId}-${index}`;
+}
+
+function SourceChunks({ sources }: Readonly<{ sources: ChatSource[] }>) {
+  const imageSources = sources.filter(isImageSource);
+  const textSources = sources.filter((source): source is TextSource => !isImageSource(source));
+
   return (
     <div className="w-full space-y-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-muted-foreground">Retrieved chunks:</span>
-        {sources.map((source) => (
-          <Badge key={source.chunkId} variant="secondary" className="gap-1 font-normal">
-            <FileText className="h-3 w-3" />
+        <span className="text-xs text-muted-foreground">Retrieved sources:</span>
+        {sources.map((source, index) => (
+          <Badge key={sourceKey(source, index)} variant="secondary" className="gap-1 font-normal">
+            {isImageSource(source) ? (
+              <ImageIcon className="h-3 w-3" />
+            ) : (
+              <FileText className="h-3 w-3" />
+            )}
             {source.fileName}
             {source.pageNumber ? ` · p.${source.pageNumber}` : ""}
             {` · ${source.score.toFixed(3)}`}
           </Badge>
         ))}
       </div>
+
+      {imageSources.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {imageSources.map((source) => (
+            <figure
+              key={source.imageId}
+              className="overflow-hidden rounded-lg border border-border bg-muted/30"
+            >
+              <a
+                href={`${apiConfig.baseUrl}${apiConfig.endpoints.documents.image(source.imageId)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <img
+                  src={`${apiConfig.baseUrl}${apiConfig.endpoints.documents.image(source.imageId)}`}
+                  alt={source.caption ?? source.fileName}
+                  loading="lazy"
+                  className="h-28 w-28 object-cover"
+                />
+              </a>
+              {source.caption && (
+                <figcaption className="max-w-28 truncate px-2 py-1 text-[10px] text-muted-foreground">
+                  {source.caption}
+                </figcaption>
+              )}
+            </figure>
+          ))}
+        </div>
+      )}
+
       <div className="space-y-2">
-        {sources.map((source, index) => (
-          <details key={source.chunkId} className="rounded-lg border border-border bg-muted/30 p-3">
+        {textSources.map((source, index) => (
+          <details
+            key={`${source.chunkId}-${index}`}
+            className="rounded-lg border border-border bg-muted/30 p-3"
+          >
             <summary className="cursor-pointer text-xs font-medium text-foreground">
               Source {index + 1}: {source.fileName}
               {source.pageNumber ? ` · page ${source.pageNumber}` : ""}

@@ -30,7 +30,17 @@ type UploadDialogProps = {
   onUploaded?: () => void;
 };
 
-const allowedExtensions = new Set(["pdf", "docx", "txt", "csv", "md"]);
+const allowedExtensions = new Set([
+  "pdf",
+  "docx",
+  "txt",
+  "csv",
+  "md",
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+]);
 const maxUploadBytes = 50 * 1024 * 1024;
 
 export function UploadDialog({ children, onUploaded }: Readonly<UploadDialogProps>) {
@@ -93,7 +103,9 @@ export function UploadDialog({ children, onUploaded }: Readonly<UploadDialogProp
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Upload documents</DialogTitle>
-          <DialogDescription>PDF, DOCX, TXT, CSV, MD — up to 50 MB each.</DialogDescription>
+          <DialogDescription>
+            PDF, DOCX, TXT, CSV, MD, PNG, JPG, WEBP — up to 50 MB each.
+          </DialogDescription>
         </DialogHeader>
         <label
           onDragOver={(e) => {
@@ -118,12 +130,14 @@ export function UploadDialog({ children, onUploaded }: Readonly<UploadDialogProp
           <span className="text-sm font-medium text-foreground">
             Drag & drop files, or <span className="text-primary">browse</span>
           </span>
-          <span className="mt-1 text-xs text-muted-foreground">PDF, DOCX, TXT, CSV, MD</span>
+          <span className="mt-1 text-xs text-muted-foreground">
+            PDF, DOCX, TXT, CSV, MD, PNG, JPG, WEBP
+          </span>
           <input
             type="file"
             multiple
             className="hidden"
-            accept=".pdf,.docx,.txt,.csv,.md"
+            accept=".pdf,.docx,.txt,.csv,.md,.png,.jpg,.jpeg,.webp"
             onChange={(e) => {
               handleFiles(e.target.files);
               e.currentTarget.value = "";
@@ -173,7 +187,7 @@ function validateFile(file: File): string | undefined {
   const extension = file.name.split(".").pop()?.toLowerCase();
 
   if (!extension || !allowedExtensions.has(extension)) {
-    return "Unsupported file type. Upload PDF, DOCX, TXT, CSV, or MD files.";
+    return "Unsupported file type. Upload PDF, DOCX, TXT, CSV, MD, PNG, JPG, or WEBP files.";
   }
 
   if (file.size > maxUploadBytes) {

@@ -11,8 +11,20 @@ export type ParsedDocumentPage = {
   pageNumber?: number;
 };
 
+export type ParsedImageSource = 'upload' | 'pdf' | 'docx';
+
+export type ParsedImage = {
+  data: Buffer;
+  mimeType: string;
+  width: number;
+  height: number;
+  pageNumber?: number;
+  source: ParsedImageSource;
+};
+
 export type ParsedDocument = {
   pages: ParsedDocumentPage[];
+  images: ParsedImage[];
 };
 
 export interface DocumentParser {

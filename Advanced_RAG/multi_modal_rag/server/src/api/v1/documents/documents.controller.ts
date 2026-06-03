@@ -4,14 +4,17 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Post,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import type { Response } from 'express';
 import { memoryStorage } from 'multer';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { documentUploadConfig } from '../../../config/document-upload.config';
@@ -19,6 +22,7 @@ import { ragRateLimitConfig } from '../../../config/rag-rate-limit.config';
 import { CurrentUser } from '../../../guard/decorators/current-user.decorator';
 import type { SafeUser } from '../../../types/auth.types';
 import { documentIdSchema, type DocumentIdDto } from './dto/document-id.dto';
+import { imageIdSchema, type ImageIdDto } from './dto/image-id.dto';
 import {
   DocumentsService,
   type UploadedDocumentFile,
@@ -68,6 +72,26 @@ export class DocumentsController {
       message: 'Documents retrieved successfully',
       data: { documents },
     };
+  }
+
+  @Get('images/:imageId')
+  async getImage(
+    @CurrentUser() user: SafeUser,
+    @Param(new ZodValidationPipe(imageIdSchema)) params: ImageIdDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const image = await this.documentsService.getImageForUser(
+      user.id,
+      params.imageId,
+    );
+
+    if (!image) {
+      throw new NotFoundException('Image not found');
+    }
+
+    res.setHeader('Content-Type', image.mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(image.data);
   }
 
   @Delete(':id')

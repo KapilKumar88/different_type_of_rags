@@ -4,8 +4,9 @@ Read this file first in future sessions. It is the compact map of what exists no
 
 ## Read This First
 
-- `client/` is the React frontend. It has real auth flows, protected app routes, API-backed document upload/list/delete, and API-backed persisted RAG conversations with document scoping and SSE streaming.
-- `server/` is the NestJS backend. It has real auth plus a learning-focused Naive RAG backend with user-owned document ingestion, persisted conversation history, document-scoped Qdrant vector search, Ollama embeddings/LLM calls, SSE chat answering, and RAG abuse controls.
+- `client/` is the React frontend. It has real auth flows, protected app routes, API-backed document/image upload/list/delete, and API-backed persisted RAG conversations with document scoping, SSE streaming, and retrieved image-source thumbnails.
+- `server/` is the NestJS backend. It has real auth plus a learning-focused **multi-modal RAG** backend with user-owned document and image ingestion, persisted conversation history, dual-encoder document-scoped retrieval (nomic text + CLIP images), Ollama embeddings/LLM/vision calls, SSE chat answering, and RAG abuse controls.
+- Multi-modal flow: images (standalone uploads + images embedded in PDFs/DOCX) are normalized with `sharp`, embedded with CLIP (`@huggingface/transformers`, in-process) into a separate Qdrant `image_vectors` collection (512-dim), stored as bytes in Postgres `document_images`, and—when retrieved—passed as real image blocks to an Ollama vision model (`llama3.2-vision`). Text chunks remain on `nomic-embed-text` (768-dim) in the `documents` collection. See `project_context/module_plans/multi_modal_rag/`.
 - Ignore generated/vendor output while reasoning about the app: `client/node_modules/`, `server/node_modules/`, `client/dist/`, `server/dist/`.
 - Detailed target guides live in:
   - `project_context/TECH-STACK.md`
@@ -161,10 +162,15 @@ RAG runtime config:
 - `QDRANT_URL`, default `http://localhost:6333`
 - `QDRANT_COLLECTION`, default `documents`
 - `QDRANT_VECTOR_SIZE`, default `768`
+- `QDRANT_IMAGE_COLLECTION`, default `image_vectors`
+- `QDRANT_IMAGE_VECTOR_SIZE`, default `512`
 - `OLLAMA_BASE_URL`, default `http://localhost:11434`
 - `OLLAMA_EMBEDDING_MODEL`, default `nomic-embed-text:v1.5`
 - `OLLAMA_LLM_MODEL`, default `minimax-m2.5:cloud`
+- `OLLAMA_VISION_MODEL`, default `llama3.2-vision`
+- `CLIP_MODEL`, default `Xenova/clip-vit-base-patch32`
 - `RAG_TOP_K`, default `5`
+- `RAG_IMAGE_TOP_K`, default `3`
 - `RAG_UPLOAD_RATE_LIMIT_TTL_MS`, default `60000`
 - `RAG_UPLOAD_RATE_LIMIT_LIMIT`, default `5`
 - `RAG_CHAT_RATE_LIMIT_TTL_MS`, default `60000`
@@ -201,6 +207,14 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
 - Several route files still hold orchestration logic. Continue extracting feature components/hooks/services as real behavior is added.
 - Avoid backend shortcuts in services: planned server architecture expects controller -> service -> repository -> database, with Zod validation and standardized responses.
 - `nomic-embed-text:v1.5` produces 768-dimensional vectors, so Qdrant vector size is `768`, not `1536`.
+- Multi-modal retrieval is dual-encoder: do NOT route document text through CLIP (its text encoder is weak and capped at ~77 tokens). Text stays on nomic in `documents` (768); images use CLIP in `image_vectors` (512). Queries embed with both and results merge into `RetrievedSource[]` tagged by `modality`.
+- CLIP runs in-process via `@huggingface/transformers`; `CLIP_MODEL` weights (~250MB) download from Hugging Face on first use and are cached. The first image upload/query after a cold start is slow.
+- Vision answers require an Ollama vision model (`OLLAMA_VISION_MODEL`, default `llama3.2-vision`) pulled locally. Generation only routes to the vision model when image sources are retrieved; otherwise it uses the text `LlmService`.
+- Image bytes live in Postgres `document_images` (bytea), never in Qdrant payloads. They are served via `GET /api/v1/documents/images/:imageId` (JWT + ownership) and loaded from the repo for answer-time vision input.
+- Image ingestion creates the `documents` row first (FK target for `document_images`), then indexes text + images; failure compensates by deleting the document (cascading image rows) and points in both Qdrant collections.
+- Image captioning during ingestion is best-effort: a vision failure logs a warning but still embeds/indexes the image via CLIP.
+- Documents can be image-only (0 text chunks). Upload now requires text OR images, not text alone.
+- All images are normalized to PNG via `sharp` (decode → flatten → downscale to `maxImageEdgePx`) before storage/embedding; embedded PDF/DOCX images below `minExtractedImagePx` are skipped.
 - The top-level `langchain` package was removed because it pulled LangGraph transitively. Use focused packages such as `@langchain/ollama` and `@langchain/textsplitters`.
 - Shared RAG infrastructure lives under `server/src/services/*`, not under `server/src/api/v1/*`. Keep API modules focused on HTTP/domain orchestration.
 - Do not reintroduce unscoped vector search or a global ask endpoint. Retrieval must stay scoped through owned conversations and their selected document IDs.

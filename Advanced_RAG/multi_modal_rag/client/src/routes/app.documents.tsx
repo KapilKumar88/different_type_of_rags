@@ -188,6 +188,7 @@ function DocumentsTable({
               </TableCell>
               <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                 {document.chunkCount}
+                {document.imageCount > 0 ? ` · ${document.imageCount} img` : ""}
               </TableCell>
               <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
                 {formatBytes(document.sizeBytes)}

@@ -1,4 +1,5 @@
-export type SourceChunk = {
+export type TextSource = {
+  modality: "text";
   chunkId: string;
   documentId: string;
   fileName: string;
@@ -8,6 +9,24 @@ export type SourceChunk = {
   createdAt: string;
 };
 
+export type ImageSource = {
+  modality: "image";
+  imageId: string;
+  documentId: string;
+  fileName: string;
+  caption?: string;
+  source: "upload" | "pdf" | "docx";
+  pageNumber?: number;
+  score: number;
+  createdAt: string;
+};
+
+/**
+ * Modality-tagged retrieval source. Messages persisted before multi-modal RAG
+ * have no `modality` field and are treated as text sources by the UI.
+ */
+export type ChatSource = TextSource | ImageSource;
+
 export type ConversationMessageRole = "user" | "assistant";
 
 export type ConversationMessage = {
@@ -15,7 +34,7 @@ export type ConversationMessage = {
   conversationId: string;
   role: ConversationMessageRole;
   content: string;
-  sources: SourceChunk[] | null;
+  sources: ChatSource[] | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -107,7 +126,7 @@ export type CreateMessageResponse = {
 };
 
 export type SourcesStreamEvent = {
-  sources: SourceChunk[];
+  sources: ChatSource[];
 };
 
 export type TokenStreamEvent = {

@@ -4,6 +4,7 @@ export type RagDocument = {
   mimeType: string;
   sizeBytes: number;
   chunkCount: number;
+  imageCount: number;
   createdAt: string;
   updatedAt: string;
 };

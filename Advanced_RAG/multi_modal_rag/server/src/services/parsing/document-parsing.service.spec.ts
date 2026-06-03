@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { DocumentParsingService } from './document-parsing.service';
 import { DocxDocumentParser } from './parsers/docx-document.parser';
+import { ImageDocumentParser } from './parsers/image-document.parser';
 import { PdfDocumentParser } from './parsers/pdf-document.parser';
 import { PlainTextDocumentParser } from './parsers/plain-text-document.parser';
 
@@ -12,6 +13,7 @@ describe('DocumentParsingService', () => {
       new PlainTextDocumentParser(),
       new PdfDocumentParser(),
       new DocxDocumentParser(),
+      new ImageDocumentParser(),
     );
   });
 
@@ -23,11 +25,18 @@ describe('DocumentParsingService', () => {
     expect(parsingService.isSupportedDocument('brief.docx')).toBe(true);
   });
 
+  it('accepts the supported image upload types', () => {
+    expect(parsingService.isSupportedDocument('diagram.png')).toBe(true);
+    expect(parsingService.isSupportedDocument('photo.jpg')).toBe(true);
+    expect(parsingService.isSupportedDocument('photo.jpeg')).toBe(true);
+    expect(parsingService.isSupportedDocument('chart.webp')).toBe(true);
+  });
+
   it('rejects unsupported file types', async () => {
     await expect(
       parsingService.parseDocument(
-        'image.png',
-        'image/png',
+        'archive.xyz',
+        'application/octet-stream',
         Buffer.from('not text'),
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -42,6 +51,7 @@ describe('DocumentParsingService', () => {
 
     expect(result).toEqual({
       pages: [{ text: 'Naive RAG stores document chunks in Qdrant.' }],
+      images: [],
     });
   });
 

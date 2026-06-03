@@ -1,6 +1,7 @@
 export type ChunkPayload = {
   chunkId: string;
   documentId: string;
+  parentId: string;
   fileName: string;
   text: string;
   pageNumber?: number;

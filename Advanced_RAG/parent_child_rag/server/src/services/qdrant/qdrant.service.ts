@@ -107,6 +107,7 @@ export class QdrantService {
     return {
       chunkId: payload.chunkId,
       documentId: payload.documentId,
+      parentId: payload.parentId,
       fileName: payload.fileName,
       text: payload.text,
       pageNumber: payload.pageNumber ?? null,
@@ -123,11 +124,12 @@ export class QdrantService {
 
     const chunkId = this.getString(payload.chunkId);
     const documentId = this.getString(payload.documentId);
+    const parentId = this.getString(payload.parentId);
     const fileName = this.getString(payload.fileName);
     const text = this.getString(payload.text);
     const createdAt = this.getString(payload.createdAt);
 
-    if (!chunkId || !documentId || !fileName || !text || !createdAt) {
+    if (!chunkId || !documentId || !parentId || !fileName || !text || !createdAt) {
       return null;
     }
 
@@ -135,6 +137,7 @@ export class QdrantService {
     const chunk: RetrievedChunk = {
       chunkId,
       documentId,
+      parentId,
       fileName,
       text,
       createdAt,

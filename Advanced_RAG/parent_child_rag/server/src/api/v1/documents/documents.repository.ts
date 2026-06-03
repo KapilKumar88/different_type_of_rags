@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import {
+  documentParents,
   documents,
   type Document,
   type NewDocument,
+  type NewDocumentParent,
 } from '../../../database/schemas';
 import { DatabaseService } from '../../../services/database/database.service';
 
@@ -18,6 +20,24 @@ export class DocumentsRepository {
       .returning();
 
     return document;
+  }
+
+  async createWithParents(
+    data: NewDocument,
+    parents: NewDocumentParent[],
+  ): Promise<Document> {
+    return this.databaseService.instance.transaction(async (tx) => {
+      const [document] = await tx
+        .insert(documents)
+        .values(data)
+        .returning();
+
+      if (parents.length > 0) {
+        await tx.insert(documentParents).values(parents);
+      }
+
+      return document;
+    });
   }
 
   async findAllByUser(userId: string): Promise<Document[]> {

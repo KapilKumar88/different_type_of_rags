@@ -1,12 +1,14 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   MessageEvent,
   NotFoundException,
 } from '@nestjs/common';
 import { ragConfig } from '../../../config/rag.config';
 import type { ConversationMessage } from '../../../database/schemas';
 import type { RetrievedChunk } from '../../../types/rag.types';
+import { DocumentParentsRepository } from '../documents/document-parents.repository';
 import { DocumentsService } from '../documents/documents.service';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { LlmService } from '../../../services/llm/llm.service';
@@ -60,12 +62,15 @@ Answer:`;
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     private readonly embeddingsService: EmbeddingsService,
     private readonly qdrantService: QdrantService,
     private readonly llmService: LlmService,
     private readonly chatRepository: ChatRepository,
     private readonly documentsService: DocumentsService,
+    private readonly documentParentsRepository: DocumentParentsRepository,
     private readonly ragConcurrencyLimiter: RagConcurrencyLimiterService,
   ) {}
 
@@ -269,13 +274,76 @@ export class ChatService {
       () => this.embeddingsService.embedQuery(question),
     );
 
-    return this.ragConcurrencyLimiter.run('qdrant-search', () =>
+    // Search small child chunks for precise vector matching.
+    const children = await this.ragConcurrencyLimiter.run('qdrant-search', () =>
       this.qdrantService.searchByDocumentIds(
         questionVector,
-        ragConfig.topK,
+        ragConfig.childTopK,
         conversation.documentIds,
       ),
     );
+
+    if (children.length === 0) {
+      return [];
+    }
+
+    // Deduplicate children to unique parents, preserving best-score order.
+    const parentRefs = this.dedupeChildrenToParents(children).slice(
+      0,
+      ragConfig.parentTopK,
+    );
+    const parentIds = parentRefs.map((ref) => ref.parentId);
+
+    // Fetch the full parent chunks from Postgres to serve richer LLM context.
+    const parentRows = await this.documentParentsRepository.findByIds(parentIds);
+    const parentMap = new Map(parentRows.map((p) => [p.id, p]));
+
+    const sources: RetrievedChunk[] = [];
+
+    for (const ref of parentRefs) {
+      const parent = parentMap.get(ref.parentId);
+
+      if (!parent) {
+        this.logger.warn(
+          `Parent chunk ${ref.parentId} not found in Postgres — skipping (possible data drift)`,
+        );
+        continue;
+      }
+
+      const source: RetrievedChunk = {
+        chunkId: ref.bestChild.chunkId,
+        documentId: ref.bestChild.documentId,
+        parentId: ref.parentId,
+        fileName: ref.bestChild.fileName,
+        text: parent.text,
+        createdAt: ref.bestChild.createdAt,
+        score: ref.bestChild.score,
+      };
+
+      if (parent.pageNumber !== null && parent.pageNumber !== undefined) {
+        source.pageNumber = parent.pageNumber;
+      }
+
+      sources.push(source);
+    }
+
+    return sources;
+  }
+
+  private dedupeChildrenToParents(
+    children: RetrievedChunk[],
+  ): Array<{ parentId: string; bestChild: RetrievedChunk }> {
+    const seen = new Set<string>();
+    const refs: Array<{ parentId: string; bestChild: RetrievedChunk }> = [];
+
+    for (const child of children) {
+      if (!seen.has(child.parentId)) {
+        seen.add(child.parentId);
+        refs.push({ parentId: child.parentId, bestChild: child });
+      }
+    }
+
+    return refs;
   }
 
   private formatContext(sources: RetrievedChunk[]): string {

@@ -19,6 +19,17 @@ describe('server environment config', () => {
     expect(parsedEnvironment.DATABASE_URL).toBe(validEnvironment.DATABASE_URL);
   });
 
+  it('applies parent-child RAG chunking defaults when unset', () => {
+    const parsedEnvironment = parseEnvironment(validEnvironment);
+
+    expect(parsedEnvironment.RAG_PARENT_CHUNK_SIZE).toBe(2000);
+    expect(parsedEnvironment.RAG_PARENT_CHUNK_OVERLAP).toBe(200);
+    expect(parsedEnvironment.RAG_CHILD_CHUNK_SIZE).toBe(400);
+    expect(parsedEnvironment.RAG_CHILD_CHUNK_OVERLAP).toBe(50);
+    expect(parsedEnvironment.RAG_CHILD_TOP_K).toBe(12);
+    expect(parsedEnvironment.RAG_PARENT_TOP_K).toBe(4);
+  });
+
   it('loads values from a dotenv-style file', () => {
     const tempDirectory = mkdtempSync(join(tmpdir(), 'rag-env-'));
     const envFilePath = join(tempDirectory, '.env');

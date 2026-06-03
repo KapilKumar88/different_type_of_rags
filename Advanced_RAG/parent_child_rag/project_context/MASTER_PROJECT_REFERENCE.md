@@ -118,45 +118,52 @@ Auth API response contracts:
 - Safe user shape is `{ id, name, email }`; `passwordHash` is never returned.
 - Auth session is an HttpOnly cookie named by `AUTH_COOKIE_NAME` (`rag_auth_token` by default).
 
-## Naive RAG Module Current State
+## Parent-Child RAG Module Current State
 
-Implemented backend APIs are protected by the existing cookie JWT guard:
+The naive RAG flow has been fully restructured into **Parent-Child RAG** ("search small chunks, answer from bigger chunks"). Implemented backend APIs are protected by the existing cookie JWT guard.
 
-- `POST /api/v1/documents/upload`
-  - Accepts multipart field `file`.
-  - Supports `.txt`, `.md`, `.csv`, `.pdf`, and `.docx`.
-  - Requires an authenticated user; saved document metadata includes `userId`, and list/delete operations are user-scoped.
-  - Enforces server-side file size, extension, MIME, content-signature, extracted-character, and chunk-count limits before expensive RAG writes.
-  - Parses text through `DocumentParsingService`, which delegates to file-family parser classes for text-like files, PDF, and DOCX. The parser contract is text-only today but is the extension point for future PDF/DOCX table or image extraction.
-  - Splits parsed text with `RecursiveCharacterTextSplitter` using chunk size `800` and overlap `100`, embeds chunks with Ollama, stores one Qdrant point per chunk, then saves document metadata in Postgres.
-  - If Postgres metadata creation fails after Qdrant upsert, the upload path compensates by deleting the just-created Qdrant points.
-  - Qdrant payload fields: `chunkId`, `documentId`, `fileName`, `text`, `pageNumber` when available, and `createdAt`.
-  - Success response: `{ success, message, data: { document } }`.
-- `GET /api/v1/documents`
-  - Returns `{ success, message, data: { documents } }`.
-- `DELETE /api/v1/documents/:id`
-  - Confirms the document belongs to the authenticated user, deletes matching Qdrant points by payload `documentId`, then deletes Postgres metadata.
-  - Qdrant delete failures leave metadata untouched so the delete can be retried.
-  - Returns `{ success, message, data: { document } }`.
-- `GET /api/v1/chat/conversations`
-  - Returns the authenticated user's conversations with `documentIds`, ordered by most recently updated.
-- `POST /api/v1/chat/conversations`
-  - Validates `{ title?, documentIds }`, deduplicates and validates document IDs, creates a conversation and document membership rows, and returns `{ conversation }`.
-- `GET /api/v1/chat/conversations/:conversationId`
-  - Returns an owned conversation with `documentIds` and ordered persisted messages.
-- `PATCH /api/v1/chat/conversations/:conversationId`
-  - Validates `{ title }`, confirms ownership, updates `title`/`updatedAt`, and returns `{ conversation }`.
-- `PATCH /api/v1/chat/conversations/:conversationId/documents`
-  - Validates `{ documentIds }`, confirms ownership, deduplicates and validates document IDs, transactionally replaces document membership, and returns `{ conversation }`.
-- `DELETE /api/v1/chat/conversations/:conversationId`
-  - Confirms ownership, hard-deletes the conversation, and relies on FK cascade to delete messages and join rows. Documents are not deleted.
-- `POST /api/v1/chat/conversations/:conversationId/messages`
-  - Validates `{ content }`, confirms ownership, persists a user message, updates conversation `updatedAt`, and returns `{ message }`.
-- `GET /api/v1/chat/conversations/:conversationId/messages/:messageId/stream`
-  - SSE endpoint for an owned persisted user message. Validates conversation ownership before message lookup, retrieves only selected conversation documents from Qdrant, emits `sources`, `token`, `done`, and `error` events, and persists the assistant message on completion.
-  - Prompt construction separates system rules from `<retrieved_context>`, `<conversation_history>`, and `<latest_user_message>`, treats retrieved/history text as untrusted content, and bounds context/history length.
-  - Stream errors are stable public payloads with codes such as `not_found`, `bad_request`, and `stream_failed`; raw dependency errors are not emitted.
-RAG runtime config:
+### Document Tables
+
+| Table | Schema file | Purpose |
+|---|---|---|
+| `documents` | `documents.schema.ts` | User-owned document metadata; `chunkCount` = number of child chunks (embedded vectors) |
+| `document_parents` | `document-parents.schema.ts` | Parent chunk text rows; FK to `documents.id` with `onDelete: cascade`; `parentIndex` = 0-based global ordinal per document |
+
+### Upload flow — `POST /api/v1/documents/upload`
+
+1. Validates file (extension/MIME/size/extracted-text/chunk-count limits).
+2. `splitDocumentIntoParents(parsedText)` → `ParentChunk[]`, each with `children: ChildChunk[]`. Two splitters: parent (2000 char / 200 overlap) and child (400 char / 50 overlap).
+3. Caps against `maxChunkCount` on total child count (the "indexed vectors" bound).
+4. Pre-generates `documentId` UUID and one `parentId` UUID per parent.
+5. Embeds all child texts → builds `VectorPoint[]` with `parentId` in Qdrant payload.
+6. Upserts child vectors to Qdrant.
+7. **Single DB transaction**: inserts `documents` row first, then `document_parents` rows (FK order — parents must come after document).
+8. On transaction failure, compensates by deleting the already-upserted Qdrant vectors.
+9. `chunkCount` on the saved document = number of child chunks, not parent chunks.
+10. Qdrant payload fields: `chunkId`, `documentId`, `parentId` (required), `fileName`, `text` (child text, for matching), `pageNumber`, `createdAt`.
+
+Response: `{ success, message, data: { document } }`.
+
+### List / Delete
+
+- `GET /api/v1/documents` → `{ success, message, data: { documents } }`.
+- `DELETE /api/v1/documents/:id` — confirms ownership, deletes Qdrant child vectors by `documentId`, deletes `documents` row → FK cascade deletes `document_parents` rows automatically. Qdrant failures leave metadata intact for retry.
+
+### Chat retrieval flow — SSE `GET /api/v1/chat/conversations/:id/messages/:msgId/stream`
+
+1. `embedQuery` (limiter `embedding`).
+2. `qdrant.searchByDocumentIds(vector, ragConfig.childTopK, documentIds)` → child chunks with `parentId` and score, sorted score-descending.
+3. `dedupeChildrenToParents(children)`: first appearance of each `parentId` = that parent's best child (preserves score order).
+4. Slice to `ragConfig.parentTopK`.
+5. `documentParentsRepository.findByIds(parentIds)` → full parent rows from Postgres.
+6. Build `sources: RetrievedChunk[]`: `text = parent.text` (~2000 chars), `score = bestChild.score`, `documentId/fileName/createdAt/chunkId` from best child, `pageNumber` from parent. Missing parent rows are logged + skipped.
+7. `formatContext` uses `source.text` (parent text) → LLM receives richer context. `maxPromptContextCharacters` (6000) caps total via `truncateEnd`.
+
+`RetrievedChunk` / `ChunkPayload` now requires `parentId: string`. Old naive-RAG Qdrant points (no `parentId`) are **rejected** by `toRetrievedChunk` — old documents must be re-uploaded.
+
+All other chat endpoints (conversations CRUD, message creation, SSE streaming, error codes) are unchanged.
+
+### RAG runtime config (updated)
 
 - `QDRANT_URL`, default `http://localhost:6333`
 - `QDRANT_COLLECTION`, default `documents`
@@ -164,7 +171,13 @@ RAG runtime config:
 - `OLLAMA_BASE_URL`, default `http://localhost:11434`
 - `OLLAMA_EMBEDDING_MODEL`, default `nomic-embed-text:v1.5`
 - `OLLAMA_LLM_MODEL`, default `minimax-m2.5:cloud`
-- `RAG_TOP_K`, default `5`
+- `RAG_TOP_K`, default `5` (kept; used only where `childTopK`/`parentTopK` haven't replaced it)
+- `RAG_PARENT_CHUNK_SIZE`, default `2000`
+- `RAG_PARENT_CHUNK_OVERLAP`, default `200`
+- `RAG_CHILD_CHUNK_SIZE`, default `400`
+- `RAG_CHILD_CHUNK_OVERLAP`, default `50`
+- `RAG_CHILD_TOP_K`, default `12`
+- `RAG_PARENT_TOP_K`, default `4`
 - `RAG_UPLOAD_RATE_LIMIT_TTL_MS`, default `60000`
 - `RAG_UPLOAD_RATE_LIMIT_LIMIT`, default `5`
 - `RAG_CHAT_RATE_LIMIT_TTL_MS`, default `60000`
@@ -173,7 +186,7 @@ RAG runtime config:
 - `RAG_STREAM_RATE_LIMIT_LIMIT`, default `10`
 - `RAG_RUNTIME_CONCURRENCY_LIMIT`, default `4`
 
-Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and queues. It now includes persisted conversation history, SSE token streaming, upload/chat/stream throttles, in-process concurrency limits, and prompt-boundary safeguards, but not agentic memory outside the stored conversation messages.
+Parent-child RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and queues. It includes persisted conversation history, SSE token streaming, upload/chat/stream throttles, in-process concurrency limits, and prompt-boundary safeguards.
 
 ## Current Gaps / Do Not Assume
 
@@ -220,6 +233,11 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
 - Conversation deletion is hard delete only. Do not assume archive/soft-delete behavior exists unless a future schema change adds it.
 - SSE retry is client-side and retries the same persisted user message ID. It avoids duplicate user messages, but a server-side stream that already completed and persisted an assistant response before the network error may still require future idempotency safeguards.
 - Update this file after significant architecture decisions, new modules, API contracts, or development pitfalls so future sessions do not re-discover the same context.
+- **Parent-child FK ordering**: in `createWithParents`, insert the `documents` row **first**, then `document_parents`. Inserting parents first violates the FK (`document_id` not yet in `documents`) and throws a 23503 error at runtime even though the unit tests (which mock the transaction) would never catch it.
+- **Old Qdrant data incompatible with parent-child**: existing naive-RAG Qdrant points have no `parentId` in their payload. `toRetrievedChunk` now rejects such points (returns `null`). Re-upload all documents after switching to parent-child RAG.
+- **CSRF session binding**: `getSessionIdentifier` in `csrf-protection.ts` binds the CSRF token to the auth cookie. Any request that carries the auth cookie must have its CSRF token fetched **with** that auth cookie, or validation will fail with 403. In e2e / curl tests, pass the auth cookie when calling `GET /api/v1/csrf-token`.
+- **`chunkCount` = child count**: the `documents.chunk_count` column counts embedded child vectors, not parent rows. Document the distinction clearly; parent row count can be queried from `document_parents` by `document_id`.
+- **`DocumentParentsRepository` single instance**: export it from `DocumentsModule` (already imported by `ChatModule`). Do not add it to `ChatModule.providers` — that would create a second DI instance.
 
 ## Quick Verification Snapshot
 
@@ -247,3 +265,4 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
   - `git ls-files Naive_RAG/server/.env Naive_RAG/server/dist Naive_RAG/server/node_modules` returned no tracked runtime/generated paths.
   - `git check-ignore -v Naive_RAG/server/.env Naive_RAG/server/dist Naive_RAG/server/node_modules` confirmed ignore coverage from `server/.gitignore`.
 - App scope cleanup verification: `npm run lint` and `npm run build` from `client/` passed; `npm run build`, `npm test -- --runInBand`, and `npm run test:e2e -- auth.e2e-spec.ts --runInBand` from `server/` passed. Auth e2e required local-bind permission for Supertest.
+- Parent-child RAG verification (2026-06-03): `npm run build` passed; `npm test` (unit, 16 suites / 103 tests) all green; e2e test `test/parent-child.e2e-spec.ts` passed against live infra (Postgres `parent_child_rag` DB, Qdrant, Ollama). Confirmed: upload creates `document_parents` rows with correct `parentIndex`, FK cascade deletes parent rows when document is deleted. Bug fixed during E2E: `createWithParents` was inserting parents before the document row — corrected to insert document first.

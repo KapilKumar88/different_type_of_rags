@@ -7,12 +7,13 @@ import {
 import { randomUUID } from 'node:crypto';
 import { documentUploadConfig } from '../../../config/document-upload.config';
 import type { Document } from '../../../database/schemas';
+import type { NewDocumentParent } from '../../../database/schemas';
 import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
 import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
 import type { VectorPoint } from '../../../types/rag.types';
 import { DocumentsRepository } from './documents.repository';
-import { splitDocumentText } from './helpers/text-splitter';
+import { splitDocumentIntoParents } from './helpers/text-splitter';
 import { DocumentParsingService } from '../../../services/parsing/document-parsing.service';
 
 export type UploadedDocumentFile = {
@@ -45,75 +46,105 @@ export class DocumentsService {
           file.buffer,
         ),
     );
-    const text = extractedText.pages
+    const fullText = extractedText.pages
       .map((page) => page.text)
       .join('\n')
       .trim();
 
-    if (text.length > documentUploadConfig.maxExtractedTextCharacters) {
+    if (fullText.length > documentUploadConfig.maxExtractedTextCharacters) {
       throw new BadRequestException('Document text is too large to index');
     }
 
-    if (!text) {
+    if (!fullText) {
       throw new BadRequestException(
         'No readable text was found in the document',
       );
     }
 
-    // 2. Split the extracted text into small overlapping chunks.
-    const chunks = await splitDocumentText(extractedText);
+    // 2. Split text into parent chunks; each parent is re-split into children.
+    const parents = await splitDocumentIntoParents(extractedText);
 
-    if (chunks.length === 0) {
+    if (parents.length === 0) {
       throw new BadRequestException('No text chunks could be created');
     }
 
-    if (chunks.length > documentUploadConfig.maxChunkCount) {
+    const allChildren = parents.flatMap((p) => p.children);
+
+    // chunkCount tracks the number of embedded child vectors (the retrieval unit).
+    if (allChildren.length > documentUploadConfig.maxChunkCount) {
       throw new BadRequestException('Document has too many chunks to index');
     }
 
     const createdAt = new Date().toISOString();
     const documentId = randomUUID();
 
-    // 3. Generate embeddings for every chunk.
+    // 3. Pre-generate a stable parentId for each parent before any I/O.
+    const parentIds = parents.map(() => randomUUID());
+
+    // 4. Build the Postgres parent rows.
+    const parentRows: NewDocumentParent[] = parents.map((parent, i) => ({
+      id: parentIds[i],
+      documentId,
+      parentIndex: parent.parentIndex,
+      text: parent.text,
+      ...(parent.pageNumber !== undefined
+        ? { pageNumber: parent.pageNumber }
+        : {}),
+    }));
+
+    // 5. Embed all child chunks and upsert as Qdrant points.
+    const childTexts = allChildren.map((c) => c.text);
     const vectors = await this.ragConcurrencyLimiter.run('embedding', () =>
-      this.embeddingsService.embedDocuments(chunks.map((chunk) => chunk.text)),
+      this.embeddingsService.embedDocuments(childTexts),
     );
 
-    // 4. Store each chunk embedding and its payload as one Qdrant point.
-    const points: VectorPoint[] = chunks.map((chunk, index) => {
-      const chunkId = randomUUID();
-      const payload = {
-        chunkId,
-        documentId,
-        fileName: file.originalname,
-        text: chunk.text,
-        createdAt,
-        ...(chunk.pageNumber === undefined
-          ? {}
-          : { pageNumber: chunk.pageNumber }),
-      };
+    // Build child points: each child carries its parent's id in the payload.
+    const points: VectorPoint[] = [];
+    let childIndex = 0;
 
-      return {
-        id: chunkId,
-        vector: vectors[index] ?? [],
-        payload,
-      };
-    });
+    for (let pi = 0; pi < parents.length; pi++) {
+      const parent = parents[pi];
+      const parentId = parentIds[pi] as string;
+
+      for (const child of parent.children) {
+        const chunkId = randomUUID();
+        points.push({
+          id: chunkId,
+          vector: vectors[childIndex] ?? [],
+          payload: {
+            chunkId,
+            documentId,
+            parentId,
+            fileName: file.originalname,
+            text: child.text,
+            createdAt,
+            ...(child.pageNumber !== undefined
+              ? { pageNumber: child.pageNumber }
+              : {}),
+          },
+        });
+        childIndex++;
+      }
+    }
 
     await this.ragConcurrencyLimiter.run('qdrant-write', () =>
       this.qdrantService.upsertPoints(points),
     );
 
+    // 6. Persist parent rows + document metadata in a single transaction.
+    // On failure, clean up the already-upserted child vectors.
     try {
-      // 5. Persist document-level metadata for listing and deletion.
-      return await this.documentsRepository.create({
-        id: documentId,
-        userId,
-        fileName: file.originalname,
-        mimeType: file.mimetype || 'application/octet-stream',
-        sizeBytes: file.size,
-        chunkCount: chunks.length,
-      });
+      return await this.documentsRepository.createWithParents(
+        {
+          id: documentId,
+          userId,
+          fileName: file.originalname,
+          mimeType: file.mimetype || 'application/octet-stream',
+          sizeBytes: file.size,
+          chunkCount: allChildren.length,
+        },
+        parentRows,
+      );
     } catch (error) {
       await this.cleanupUploadedVectors(documentId);
       throw error;

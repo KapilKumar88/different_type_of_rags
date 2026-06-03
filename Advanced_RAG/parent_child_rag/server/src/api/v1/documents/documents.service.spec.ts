@@ -35,7 +35,7 @@ function createFile(
     originalname: 'rag-notes.txt',
     mimetype: 'text/plain',
     size: 42,
-    buffer: Buffer.from('Naive RAG retrieves chunks from Qdrant.'),
+    buffer: Buffer.from('Parent-child RAG retrieves chunks from Qdrant.'),
     ...overrides,
   };
 }
@@ -51,6 +51,7 @@ describe('DocumentsService', () => {
   beforeEach(() => {
     documentsRepository = {
       create: jest.fn(),
+      createWithParents: jest.fn(),
       findAllByUser: jest.fn(),
       findByIdForUser: jest.fn(),
       findByIdsForUser: jest.fn(),
@@ -88,10 +89,10 @@ describe('DocumentsService', () => {
     );
   });
 
-  it('extracts, chunks, embeds, stores vectors, and saves document metadata', async () => {
+  it('parses, splits into parents+children, embeds children, stores vectors with parentId, and saves metadata', async () => {
     const document = createDocument();
     embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
-    documentsRepository.create.mockResolvedValue(document);
+    documentsRepository.createWithParents.mockResolvedValue(document);
 
     const result = await documentsService.upload('user-1', createFile());
 
@@ -101,18 +102,19 @@ describe('DocumentsService', () => {
       expect.any(Buffer),
     );
     expect(embeddingsService.embedDocuments).toHaveBeenCalledWith([
-      'Naive RAG retrieves chunks from Qdrant.',
+      'Parent-child RAG retrieves chunks from Qdrant.',
     ]);
     expect(qdrantService.upsertPoints).toHaveBeenCalledWith([
       expect.objectContaining({
         vector: Array(768).fill(0.1),
         payload: expect.objectContaining({
           fileName: 'rag-notes.txt',
-          text: 'Naive RAG retrieves chunks from Qdrant.',
+          text: 'Parent-child RAG retrieves chunks from Qdrant.',
+          parentId: expect.any(String),
         }),
       }),
     ]);
-    expect(documentsRepository.create).toHaveBeenCalledWith(
+    expect(documentsRepository.createWithParents).toHaveBeenCalledWith(
       expect.objectContaining({
         fileName: 'rag-notes.txt',
         mimeType: 'text/plain',
@@ -120,17 +122,38 @@ describe('DocumentsService', () => {
         chunkCount: 1,
         userId: 'user-1',
       }),
+      expect.arrayContaining([
+        expect.objectContaining({
+          parentIndex: 0,
+          text: 'Parent-child RAG retrieves chunks from Qdrant.',
+        }),
+      ]),
     );
     expect(result).toBe(document);
   });
 
-  it('keeps parser page numbers on vector payloads', async () => {
+  it('child point parentId matches the parent row id', async () => {
+    const document = createDocument();
+    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
+    documentsRepository.createWithParents.mockResolvedValue(document);
+
+    await documentsService.upload('user-1', createFile());
+
+    const upsertedPoints = qdrantService.upsertPoints.mock.calls[0]?.[0] ?? [];
+    const parentRows =
+      documentsRepository.createWithParents.mock.calls[0]?.[1] ?? [];
+
+    expect(parentRows.length).toBeGreaterThan(0);
+    expect(upsertedPoints[0]?.payload.parentId).toBe(parentRows[0]?.id);
+  });
+
+  it('keeps parser page numbers on child vector payloads', async () => {
     const document = createDocument();
     documentParsingService.parseDocument.mockResolvedValue({
       pages: [{ text: 'Page specific text', pageNumber: 4 }],
     });
     embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.2)]);
-    documentsRepository.create.mockResolvedValue(document);
+    documentsRepository.createWithParents.mockResolvedValue(document);
 
     await documentsService.upload('user-1', createFile());
 
@@ -144,10 +167,24 @@ describe('DocumentsService', () => {
     ]);
   });
 
-  it('cleans up uploaded vectors when metadata creation fails', async () => {
+  it('chunkCount equals the number of child chunks, not parent chunks', async () => {
+    const document = createDocument();
+    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
+    documentsRepository.createWithParents.mockResolvedValue(document);
+
+    await documentsService.upload('user-1', createFile());
+
+    const upsertedPoints = qdrantService.upsertPoints.mock.calls[0]?.[0] ?? [];
+    const savedDoc =
+      documentsRepository.createWithParents.mock.calls[0]?.[0];
+
+    expect(savedDoc?.chunkCount).toBe(upsertedPoints.length);
+  });
+
+  it('cleans up uploaded vectors when metadata transaction fails', async () => {
     const databaseError = new Error('database unavailable');
     embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
-    documentsRepository.create.mockRejectedValue(databaseError);
+    documentsRepository.createWithParents.mockRejectedValue(databaseError);
 
     await expect(
       documentsService.upload('user-1', createFile()),
@@ -168,7 +205,7 @@ describe('DocumentsService', () => {
       documentsService.upload('user-1', createFile()),
     ).rejects.toThrow(qdrantError);
 
-    expect(documentsRepository.create).not.toHaveBeenCalled();
+    expect(documentsRepository.createWithParents).not.toHaveBeenCalled();
     expect(qdrantService.deleteByDocumentId).not.toHaveBeenCalled();
   });
 

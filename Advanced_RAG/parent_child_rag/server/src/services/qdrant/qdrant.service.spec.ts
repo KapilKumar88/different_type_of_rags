@@ -24,6 +24,7 @@ describe('QdrantService', () => {
         payload: {
           chunkId: 'chunk-1',
           documentId: 'document-1',
+          parentId: 'parent-1',
           fileName: 'one.txt',
           text: 'Allowed text',
           createdAt: '2026-01-01T00:00:00.000Z',
@@ -34,6 +35,7 @@ describe('QdrantService', () => {
         payload: {
           chunkId: 'chunk-2',
           documentId: 'document-3',
+          parentId: 'parent-2',
           fileName: 'three.txt',
           text: 'Out of scope text',
           createdAt: '2026-01-01T00:00:00.000Z',
@@ -73,6 +75,7 @@ describe('QdrantService', () => {
       {
         chunkId: 'chunk-1',
         documentId: 'document-1',
+        parentId: 'parent-1',
         fileName: 'one.txt',
         text: 'Allowed text',
         createdAt: '2026-01-01T00:00:00.000Z',

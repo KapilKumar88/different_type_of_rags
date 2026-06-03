@@ -2,36 +2,73 @@ import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { ragConfig } from '../../../../config/rag.config';
 import type { ParsedDocument } from '../../../../types/document-parsing.types';
 
-export type TextChunk = {
+export type ChildChunk = {
   text: string;
   pageNumber?: number;
 };
 
-const splitter = new RecursiveCharacterTextSplitter({
-  chunkSize: ragConfig.chunkSize,
-  chunkOverlap: ragConfig.chunkOverlap,
+export type ParentChunk = {
+  parentIndex: number;
+  text: string;
+  pageNumber?: number;
+  children: ChildChunk[];
+};
+
+const parentSplitter = new RecursiveCharacterTextSplitter({
+  chunkSize: ragConfig.parentChunkSize,
+  chunkOverlap: ragConfig.parentChunkOverlap,
 });
 
-export async function splitDocumentText(
+const childSplitter = new RecursiveCharacterTextSplitter({
+  chunkSize: ragConfig.childChunkSize,
+  chunkOverlap: ragConfig.childChunkOverlap,
+});
+
+export async function splitDocumentIntoParents(
   documentText: ParsedDocument,
-): Promise<TextChunk[]> {
-  const chunks: TextChunk[] = [];
+): Promise<ParentChunk[]> {
+  const parents: ParentChunk[] = [];
+  let parentIndex = 0;
 
   for (const page of documentText.pages) {
-    const pageChunks = await splitter.splitText(page.text);
-    pageChunks
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length > 0)
-      .forEach((chunk) => {
-        const textChunk: TextChunk = { text: chunk };
+    const rawParents = await parentSplitter.splitText(page.text);
+    const pageParents = rawParents
+      .map((text) => text.trim())
+      .filter((text) => text.length > 0);
 
-        if (page.pageNumber !== undefined) {
-          textChunk.pageNumber = page.pageNumber;
-        }
+    for (const parentText of pageParents) {
+      const rawChildren = await childSplitter.splitText(parentText);
+      const children: ChildChunk[] = rawChildren
+        .map((text) => text.trim())
+        .filter((text) => text.length > 0)
+        .map((text) => {
+          const child: ChildChunk = { text };
 
-        chunks.push(textChunk);
-      });
+          if (page.pageNumber !== undefined) {
+            child.pageNumber = page.pageNumber;
+          }
+
+          return child;
+        });
+
+      if (children.length === 0) {
+        continue;
+      }
+
+      const parent: ParentChunk = {
+        parentIndex,
+        text: parentText,
+        children,
+      };
+
+      if (page.pageNumber !== undefined) {
+        parent.pageNumber = page.pageNumber;
+      }
+
+      parents.push(parent);
+      parentIndex++;
+    }
   }
 
-  return chunks;
+  return parents;
 }

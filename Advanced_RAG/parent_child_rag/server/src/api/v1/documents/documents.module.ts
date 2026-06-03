@@ -3,6 +3,7 @@ import { EmbeddingsModule } from '../../../services/embeddings/embeddings.module
 import { QdrantModule } from '../../../services/qdrant/qdrant.module';
 import { RagRuntimeModule } from '../../../services/rag-runtime/rag-runtime.module';
 import { DocumentsController } from './documents.controller';
+import { DocumentParentsRepository } from './document-parents.repository';
 import { DocumentsRepository } from './documents.repository';
 import { DocumentsService } from './documents.service';
 import { DocumentParsingModule } from '../../../services/parsing/document-parsing.module';
@@ -19,8 +20,9 @@ import { DocumentUploadValidationPipe } from './pipes/document-upload-validation
   providers: [
     DocumentsService,
     DocumentsRepository,
+    DocumentParentsRepository,
     DocumentUploadValidationPipe,
   ],
-  exports: [DocumentsService],
+  exports: [DocumentsService, DocumentParentsRepository],
 })
 export class DocumentsModule {}

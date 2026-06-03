@@ -36,6 +36,12 @@ const envSchema = z
     OLLAMA_EMBEDDING_MODEL: z.string().min(1).default('nomic-embed-text:v1.5'),
     OLLAMA_LLM_MODEL: z.string().min(1).default('minimax-m2.5:cloud'),
     RAG_TOP_K: z.coerce.number().int().positive().default(5),
+    RAG_PARENT_CHUNK_SIZE: z.coerce.number().int().positive().default(2000),
+    RAG_PARENT_CHUNK_OVERLAP: z.coerce.number().int().nonnegative().default(200),
+    RAG_CHILD_CHUNK_SIZE: z.coerce.number().int().positive().default(400),
+    RAG_CHILD_CHUNK_OVERLAP: z.coerce.number().int().nonnegative().default(50),
+    RAG_CHILD_TOP_K: z.coerce.number().int().positive().default(12),
+    RAG_PARENT_TOP_K: z.coerce.number().int().positive().default(4),
     RAG_UPLOAD_RATE_LIMIT_TTL_MS: z.coerce
       .number()
       .int()

@@ -1,5 +1,6 @@
 import cookieParser from 'cookie-parser';
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { configureCsrfProtection } from './common/security/csrf-protection';
@@ -16,6 +17,13 @@ async function bootstrap() {
   app.use(cookieParser());
   configureCsrfProtection(app);
   app.useGlobalFilters(new HttpExceptionFilter());
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Structured Data RAG API')
+    .setDescription('Authenticated document-scoped RAG API')
+    .setVersion('1.0')
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api/docs', app, swaggerDocument);
 
   await app.listen(appConfig.port);
 }

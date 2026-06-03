@@ -1,4 +1,5 @@
 import type { SupportedDocumentExtension } from '../config/document-upload.config';
+import type { ParsedStructuredTable } from './rag.types';
 
 export type DocumentParseInput = {
   fileName: string;
@@ -13,6 +14,7 @@ export type ParsedDocumentPage = {
 
 export type ParsedDocument = {
   pages: ParsedDocumentPage[];
+  structuredTables: ParsedStructuredTable[];
 };
 
 export interface DocumentParser {

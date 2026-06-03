@@ -71,6 +71,7 @@ describe('QdrantService', () => {
     );
     expect(result).toEqual([
       {
+        kind: 'text',
         chunkId: 'chunk-1',
         documentId: 'document-1',
         fileName: 'one.txt',

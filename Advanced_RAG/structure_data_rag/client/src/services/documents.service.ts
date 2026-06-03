@@ -1,6 +1,10 @@
 import { apiConfig } from "@/config/api.config";
 import { apiClient } from "@/lib/api-client";
-import type { DocumentMutationResponse, DocumentsListResponse } from "@/types/document.types";
+import type {
+  DocumentMutationResponse,
+  DocumentTablesResponse,
+  DocumentsListResponse,
+} from "@/types/document.types";
 
 export const documentsService = {
   list(): Promise<DocumentsListResponse> {
@@ -19,5 +23,9 @@ export const documentsService = {
 
   delete(id: string): Promise<DocumentMutationResponse> {
     return apiClient.delete<DocumentMutationResponse>(apiConfig.endpoints.documents.delete(id));
+  },
+
+  listTables(id: string): Promise<DocumentTablesResponse> {
+    return apiClient.get<DocumentTablesResponse>(apiConfig.endpoints.documents.tables(id));
   },
 };

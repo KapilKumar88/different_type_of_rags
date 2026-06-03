@@ -17,6 +17,7 @@ export const apiConfig = {
     documents: {
       upload: "/api/v1/documents/upload",
       list: "/api/v1/documents",
+      tables: (id: string) => `/api/v1/documents/${pathSegment(id)}/tables`,
       delete: (id: string) => `/api/v1/documents/${pathSegment(id)}`,
     },
     chat: {

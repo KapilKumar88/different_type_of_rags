@@ -10,6 +10,8 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  Database,
+  Table2,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -36,15 +38,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UploadDialog } from "@/components/app/upload-dialog";
 import { usePageMeta } from "@/hooks/use-page-meta";
 import { ApiClientError } from "@/lib/api-client";
 import { documentsService } from "@/services/documents.service";
 import type { RagDocument } from "@/types/document.types";
+import type { StructuredDocumentTable } from "@/types/document.types";
 import { toast } from "sonner";
 
 type DocStatus = "Indexed";
-type DocType = "pdf" | "docx" | "txt" | "csv" | "md" | "other";
+type DocType = "pdf" | "docx" | "txt" | "csv" | "md" | "json" | "xlsx" | "other";
 
 const documentsQueryKey = ["documents"] as const;
 const emptyDocuments: RagDocument[] = [];
@@ -54,6 +58,7 @@ export function DocumentsPage() {
   const queryClient = useQueryClient();
   const [query, setQuery] = React.useState("");
   const [status, setStatus] = React.useState<"all" | DocStatus>("all");
+  const [previewDocument, setPreviewDocument] = React.useState<RagDocument | null>(null);
   const documentsQuery = useQuery({
     queryKey: documentsQueryKey,
     queryFn: documentsService.list,
@@ -70,6 +75,11 @@ export function DocumentsPage() {
     },
   });
   const documents = documentsQuery.data?.data.documents ?? emptyDocuments;
+  const tablePreviewQuery = useQuery({
+    queryKey: ["documents", previewDocument?.id, "tables"],
+    queryFn: () => documentsService.listTables(previewDocument?.id ?? ""),
+    enabled: Boolean(previewDocument),
+  });
   const normalizedQuery = React.useMemo(() => query.trim().toLowerCase(), [query]);
   const filtered = React.useMemo(() => {
     return documents.filter((document) => {
@@ -137,8 +147,20 @@ export function DocumentsPage() {
           deletingId={deleteMutation.variables}
           deleting={deleteMutation.isPending}
           onDelete={(id) => deleteMutation.mutate(id)}
+          onPreviewTables={setPreviewDocument}
         />
       )}
+      <TablePreviewDialog
+        document={previewDocument}
+        tables={tablePreviewQuery.data?.data.tables ?? []}
+        loading={tablePreviewQuery.isPending}
+        open={Boolean(previewDocument)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewDocument(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -148,11 +170,13 @@ function DocumentsTable({
   deleting,
   deletingId,
   onDelete,
+  onPreviewTables,
 }: Readonly<{
   documents: RagDocument[];
   deleting: boolean;
   deletingId: string | undefined;
   onDelete: (id: string) => void;
+  onPreviewTables: (document: RagDocument) => void;
 }>) {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -162,6 +186,7 @@ function DocumentsTable({
             <TableHead>Name</TableHead>
             <TableHead className="hidden sm:table-cell">Status</TableHead>
             <TableHead className="hidden md:table-cell">Chunks</TableHead>
+            <TableHead className="hidden xl:table-cell">Tables</TableHead>
             <TableHead className="hidden lg:table-cell">Size</TableHead>
             <TableHead className="hidden lg:table-cell">Uploaded</TableHead>
             <TableHead className="w-12" />
@@ -189,6 +214,11 @@ function DocumentsTable({
               <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                 {document.chunkCount}
               </TableCell>
+              <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">
+                {document.structuredTableCount > 0
+                  ? `${document.structuredTableCount} / ${document.structuredRowCount} rows`
+                  : "None"}
+              </TableCell>
               <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
                 {formatBytes(document.sizeBytes)}
               </TableCell>
@@ -203,6 +233,13 @@ function DocumentsTable({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      disabled={document.structuredTableCount === 0}
+                      onClick={() => onPreviewTables(document)}
+                    >
+                      <Table2 className="mr-2 h-4 w-4" />
+                      View tables
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-destructive"
                       disabled={deleting && deletingId === document.id}
@@ -226,15 +263,91 @@ function DocumentsTable({
   );
 }
 
+function TablePreviewDialog({
+  document,
+  tables,
+  loading,
+  open,
+  onOpenChange,
+}: Readonly<{
+  document: RagDocument | null;
+  tables: StructuredDocumentTable[];
+  loading: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}>) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Database className="h-4 w-4" />
+            {document?.fileName ?? "Structured tables"}
+          </DialogTitle>
+        </DialogHeader>
+        {loading ? (
+          <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading tables...
+          </div>
+        ) : tables.length === 0 ? (
+          <p className="py-8 text-sm text-muted-foreground">No structured tables found.</p>
+        ) : (
+          <div className="space-y-4">
+            {tables.map((table) => (
+              <div key={table.id} className="rounded-lg border border-border">
+                <div className="border-b border-border p-3">
+                  <div className="text-sm font-medium">{table.title}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {table.sourceLabel} · {table.columnCount} columns · {table.rowCount} rows
+                  </div>
+                </div>
+                <div className="max-h-64 overflow-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted text-muted-foreground">
+                      <tr>
+                        {table.columns.map((column) => (
+                          <th key={column.id} className="px-2 py-1 font-medium">
+                            {column.name}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {table.rows.map((row) => (
+                        <tr key={row.id} className="border-t border-border">
+                          {table.columns.map((column) => (
+                            <td key={column.id} className="px-2 py-1 text-muted-foreground">
+                              {formatCell(row.values[column.columnKey])}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function FileIcon({ type }: Readonly<{ type: DocType }>) {
-  const Cmp = type === "csv" ? FileSpreadsheet : type === "md" ? FileCode : FileText;
+  const Cmp =
+    type === "csv" || type === "xlsx"
+      ? FileSpreadsheet
+      : type === "md" || type === "json"
+        ? FileCode
+        : FileText;
   let tone = "bg-muted text-muted-foreground";
 
   if (type === "pdf") {
     tone = "bg-red-500/10 text-red-600 dark:text-red-400";
   } else if (type === "docx") {
     tone = "bg-blue-500/10 text-blue-600 dark:text-blue-400";
-  } else if (type === "csv") {
+  } else if (type === "csv" || type === "xlsx") {
     tone = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
   }
 
@@ -318,7 +431,9 @@ function getDocType(document: RagDocument): DocType {
     extension === "docx" ||
     extension === "txt" ||
     extension === "csv" ||
-    extension === "md"
+    extension === "md" ||
+    extension === "json" ||
+    extension === "xlsx"
   ) {
     return extension;
   }
@@ -338,4 +453,12 @@ function formatDate(value: string) {
     month: "short",
     day: "2-digit",
   }).format(new Date(value));
+}
+
+function formatCell(value: string | number | boolean | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value);
 }

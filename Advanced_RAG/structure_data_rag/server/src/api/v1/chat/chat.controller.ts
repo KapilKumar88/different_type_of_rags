@@ -12,6 +12,7 @@ import {
   Sse,
   UseGuards,
 } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Observable } from 'rxjs';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
@@ -45,10 +46,14 @@ import {
 } from './dto/update-conversation.dto';
 
 @Controller('api/v1/chat')
+@ApiTags('Chat')
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
   @Get('conversations')
+  @ApiOperation({ summary: 'List conversations' })
+  @ApiResponse({ status: 200, description: 'Conversations retrieved' })
+  @ApiResponse({ status: 401, description: 'Unauthenticated' })
   async listConversations(@CurrentUser() user: SafeUser) {
     const conversations = await this.chatService.listConversations(user.id);
 
@@ -60,6 +65,11 @@ export class ChatController {
   }
 
   @Post('conversations')
+  @ApiOperation({ summary: 'Create a document-scoped conversation' })
+  @ApiResponse({ status: 201, description: 'Conversation created' })
+  @ApiResponse({ status: 400, description: 'Invalid selected documents' })
+  @ApiResponse({ status: 401, description: 'Unauthenticated' })
+  @ApiResponse({ status: 422, description: 'Validation failed' })
   @UseGuards(ThrottlerGuard)
   @Throttle({
     [ragRateLimitConfig.chat.name]: {
@@ -86,6 +96,11 @@ export class ChatController {
   }
 
   @Get('conversations/:conversationId')
+  @ApiOperation({ summary: 'Get a conversation with messages' })
+  @ApiResponse({ status: 200, description: 'Conversation retrieved' })
+  @ApiResponse({ status: 401, description: 'Unauthenticated' })
+  @ApiResponse({ status: 404, description: 'Conversation not found' })
+  @ApiResponse({ status: 422, description: 'Validation failed' })
   async getConversation(
     @CurrentUser() user: SafeUser,
     @Param(new ZodValidationPipe(conversationIdSchema))
@@ -104,6 +119,11 @@ export class ChatController {
   }
 
   @Patch('conversations/:conversationId')
+  @ApiOperation({ summary: 'Update a conversation title' })
+  @ApiResponse({ status: 200, description: 'Conversation updated' })
+  @ApiResponse({ status: 401, description: 'Unauthenticated' })
+  @ApiResponse({ status: 404, description: 'Conversation not found' })
+  @ApiResponse({ status: 422, description: 'Validation failed' })
   async updateConversation(
     @CurrentUser() user: SafeUser,
     @Param(new ZodValidationPipe(conversationIdSchema))
@@ -125,6 +145,12 @@ export class ChatController {
   }
 
   @Patch('conversations/:conversationId/documents')
+  @ApiOperation({ summary: 'Update a conversation document scope' })
+  @ApiResponse({ status: 200, description: 'Conversation documents updated' })
+  @ApiResponse({ status: 400, description: 'Invalid selected documents' })
+  @ApiResponse({ status: 401, description: 'Unauthenticated' })
+  @ApiResponse({ status: 404, description: 'Conversation not found' })
+  @ApiResponse({ status: 422, description: 'Validation failed' })
   @UseGuards(ThrottlerGuard)
   @Throttle({
     [ragRateLimitConfig.chat.name]: {
@@ -153,6 +179,11 @@ export class ChatController {
   }
 
   @Delete('conversations/:conversationId')
+  @ApiOperation({ summary: 'Delete a conversation' })
+  @ApiResponse({ status: 200, description: 'Conversation deleted' })
+  @ApiResponse({ status: 401, description: 'Unauthenticated' })
+  @ApiResponse({ status: 404, description: 'Conversation not found' })
+  @ApiResponse({ status: 422, description: 'Validation failed' })
   async deleteConversation(
     @CurrentUser() user: SafeUser,
     @Param(new ZodValidationPipe(conversationIdSchema))
@@ -171,6 +202,11 @@ export class ChatController {
   }
 
   @Post('conversations/:conversationId/messages')
+  @ApiOperation({ summary: 'Create a user message' })
+  @ApiResponse({ status: 201, description: 'Message created' })
+  @ApiResponse({ status: 401, description: 'Unauthenticated' })
+  @ApiResponse({ status: 404, description: 'Conversation not found' })
+  @ApiResponse({ status: 422, description: 'Validation failed' })
   @UseGuards(ThrottlerGuard)
   @Throttle({
     [ragRateLimitConfig.chat.name]: {
@@ -199,6 +235,11 @@ export class ChatController {
   }
 
   @Sse('conversations/:conversationId/messages/:messageId/stream')
+  @ApiOperation({ summary: 'Stream a structured RAG answer for a message' })
+  @ApiResponse({ status: 200, description: 'SSE answer stream' })
+  @ApiResponse({ status: 401, description: 'Unauthenticated' })
+  @ApiResponse({ status: 404, description: 'Conversation or message not found' })
+  @ApiResponse({ status: 422, description: 'Validation failed' })
   @UseGuards(ThrottlerGuard)
   @Throttle({
     [ragRateLimitConfig.stream.name]: {

@@ -23,7 +23,7 @@ export class DocumentUploadValidationPipe implements PipeTransform<
 
     if (!this.documentParsingService.isSupportedDocument(file.originalname)) {
       throw new BadRequestException(
-        'Unsupported file type. Upload .txt, .md, .csv, .pdf, or .docx files.',
+        'Unsupported file type. Upload .txt, .md, .csv, .json, .xlsx, .pdf, or .docx files.',
       );
     }
 

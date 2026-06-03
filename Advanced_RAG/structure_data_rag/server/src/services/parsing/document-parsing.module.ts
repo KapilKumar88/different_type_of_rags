@@ -3,6 +3,7 @@ import { DocumentParsingService } from './document-parsing.service';
 import { DocxDocumentParser } from './parsers/docx-document.parser';
 import { PdfDocumentParser } from './parsers/pdf-document.parser';
 import { PlainTextDocumentParser } from './parsers/plain-text-document.parser';
+import { XlsxDocumentParser } from './parsers/xlsx-document.parser';
 
 @Module({
   providers: [
@@ -10,6 +11,7 @@ import { PlainTextDocumentParser } from './parsers/plain-text-document.parser';
     PlainTextDocumentParser,
     PdfDocumentParser,
     DocxDocumentParser,
+    XlsxDocumentParser,
   ],
   exports: [DocumentParsingService],
 })

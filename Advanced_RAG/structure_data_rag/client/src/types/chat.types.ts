@@ -1,4 +1,8 @@
-export type SourceChunk = {
+export type StructuredValue = string | number | boolean | null;
+
+export type TextSourceChunk = {
+  sourceKind: "text";
+  kind: "text";
   chunkId: string;
   documentId: string;
   fileName: string;
@@ -7,6 +11,43 @@ export type SourceChunk = {
   score: number;
   createdAt: string;
 };
+
+export type TableSourceChunk = {
+  sourceKind: "table";
+  tableId: string;
+  documentId: string;
+  fileName: string;
+  tableTitle: string;
+  sourceLabel: string;
+  sourceType: "csv" | "xlsx" | "json" | "markdown" | "docx" | "pdf";
+  rowCount: number;
+  columnCount: number;
+  score?: number;
+};
+
+export type QueryResultColumn = {
+  key: string;
+  name: string;
+  index: number;
+  valueType: "string" | "number" | "boolean" | "date" | "empty";
+  nonNullCount: number;
+  sampleValues: StructuredValue[];
+};
+
+export type QueryResultSourceChunk = {
+  sourceKind: "query_result";
+  tableId: string;
+  documentId: string;
+  fileName: string;
+  tableTitle: string;
+  sourceLabel: string;
+  operation: "select" | "count" | "sum" | "avg" | "min" | "max";
+  columns: QueryResultColumn[];
+  rows: Record<string, StructuredValue>[];
+  rowCount: number;
+};
+
+export type SourceChunk = TextSourceChunk | TableSourceChunk | QueryResultSourceChunk;
 
 export type ConversationMessageRole = "user" | "assistant";
 

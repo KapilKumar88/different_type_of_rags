@@ -10,6 +10,7 @@ import {
   type UploadedDocumentFile,
 } from './documents.service';
 import { DocumentParsingService } from '../../../services/parsing/document-parsing.service';
+import { StructuredDocumentsRepository } from './structured-documents.repository';
 
 const createdAt = new Date('2026-01-01T00:00:00.000Z');
 const updatedAt = new Date('2026-01-01T00:00:00.000Z');
@@ -22,6 +23,9 @@ function createDocument(overrides: Partial<Document> = {}): Document {
     mimeType: 'text/plain',
     sizeBytes: 42,
     chunkCount: 1,
+    contentKind: 'text',
+    structuredTableCount: 0,
+    structuredRowCount: 0,
     createdAt,
     updatedAt,
     ...overrides,
@@ -46,6 +50,7 @@ describe('DocumentsService', () => {
   let qdrantService: jest.Mocked<QdrantService>;
   let documentParsingService: jest.Mocked<DocumentParsingService>;
   let ragConcurrencyLimiter: jest.Mocked<RagConcurrencyLimiterService>;
+  let structuredDocumentsRepository: jest.Mocked<StructuredDocumentsRepository>;
   let documentsService: DocumentsService;
 
   beforeEach(() => {
@@ -73,18 +78,25 @@ describe('DocumentsService', () => {
           buffer: Buffer,
         ) => ({
           pages: [{ text: buffer.toString('utf8') }],
+          structuredTables: [],
         }),
       ),
     } as unknown as jest.Mocked<DocumentParsingService>;
     ragConcurrencyLimiter = {
       run: jest.fn(async (_key, task: () => Promise<unknown>) => task()),
     } as unknown as jest.Mocked<RagConcurrencyLimiterService>;
+    structuredDocumentsRepository = {
+      createTables: jest.fn().mockResolvedValue([]),
+      findTablesByDocumentForUser: jest.fn(),
+      findTablesByDocuments: jest.fn(),
+    } as unknown as jest.Mocked<StructuredDocumentsRepository>;
     documentsService = new DocumentsService(
       documentsRepository,
       embeddingsService,
       qdrantService,
       documentParsingService,
       ragConcurrencyLimiter,
+      structuredDocumentsRepository,
     );
   });
 
@@ -128,6 +140,7 @@ describe('DocumentsService', () => {
     const document = createDocument();
     documentParsingService.parseDocument.mockResolvedValue({
       pages: [{ text: 'Page specific text', pageNumber: 4 }],
+      structuredTables: [],
     });
     embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.2)]);
     documentsRepository.create.mockResolvedValue(document);
@@ -144,7 +157,7 @@ describe('DocumentsService', () => {
     ]);
   });
 
-  it('cleans up uploaded vectors when metadata creation fails', async () => {
+  it('does not write vectors when metadata creation fails', async () => {
     const databaseError = new Error('database unavailable');
     embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
     documentsRepository.create.mockRejectedValue(databaseError);
@@ -153,23 +166,30 @@ describe('DocumentsService', () => {
       documentsService.upload('user-1', createFile()),
     ).rejects.toThrow(databaseError);
 
-    const upsertedPoints = qdrantService.upsertPoints.mock.calls[0]?.[0];
-    const documentId = upsertedPoints?.[0]?.payload.documentId;
-    expect(documentId).toEqual(expect.any(String));
-    expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(documentId);
+    expect(qdrantService.upsertPoints).not.toHaveBeenCalled();
+    expect(qdrantService.deleteByDocumentId).not.toHaveBeenCalled();
   });
 
-  it('does not create metadata when Qdrant upsert fails', async () => {
+  it('cleans metadata and vectors when Qdrant upsert fails', async () => {
     const qdrantError = new Error('qdrant unavailable');
+    const document = createDocument();
     embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
+    documentsRepository.create.mockResolvedValue(document);
     qdrantService.upsertPoints.mockRejectedValue(qdrantError);
 
     await expect(
       documentsService.upload('user-1', createFile()),
     ).rejects.toThrow(qdrantError);
 
-    expect(documentsRepository.create).not.toHaveBeenCalled();
-    expect(qdrantService.deleteByDocumentId).not.toHaveBeenCalled();
+    const createdDocumentId = documentsRepository.create.mock.calls[0]?.[0].id;
+    expect(documentsRepository.create).toHaveBeenCalled();
+    expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(
+      createdDocumentId,
+    );
+    expect(documentsRepository.deleteByIdForUser).toHaveBeenCalledWith(
+      'user-1',
+      createdDocumentId,
+    );
   });
 
   it('rejects documents with no readable text', async () => {

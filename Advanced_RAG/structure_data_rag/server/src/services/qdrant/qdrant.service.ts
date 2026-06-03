@@ -5,6 +5,8 @@ import { qdrantConfig } from '../../config/qdrant.config';
 import type {
   ChunkPayload,
   RetrievedChunk,
+  RetrievedTableSummary,
+  RetrievedTextChunk,
   VectorPoint,
 } from '../../types/rag.types';
 
@@ -105,11 +107,18 @@ export class QdrantService {
 
   private toQdrantPayload(payload: ChunkPayload): QdrantPayload {
     return {
+      kind: payload.kind,
       chunkId: payload.chunkId,
       documentId: payload.documentId,
       fileName: payload.fileName,
       text: payload.text,
       pageNumber: payload.pageNumber ?? null,
+      tableId: payload.tableId ?? null,
+      tableKey: payload.tableKey ?? null,
+      tableTitle: payload.tableTitle ?? null,
+      sourceType: payload.sourceType ?? null,
+      rowCount: payload.rowCount ?? null,
+      columnCount: payload.columnCount ?? null,
       createdAt: payload.createdAt,
     };
   }
@@ -122,6 +131,7 @@ export class QdrantService {
     }
 
     const chunkId = this.getString(payload.chunkId);
+    const kind = this.getString(payload.kind) ?? 'text';
     const documentId = this.getString(payload.documentId);
     const fileName = this.getString(payload.fileName);
     const text = this.getString(payload.text);
@@ -132,7 +142,50 @@ export class QdrantService {
     }
 
     const pageNumber = this.getNumber(payload.pageNumber);
-    const chunk: RetrievedChunk = {
+    if (kind === 'table_summary') {
+      const tableId = this.getString(payload.tableId);
+      const tableKey = this.getString(payload.tableKey);
+      const tableTitle = this.getString(payload.tableTitle);
+      const sourceType = this.getString(payload.sourceType);
+      const rowCount = this.getNumber(payload.rowCount);
+      const columnCount = this.getNumber(payload.columnCount);
+
+      if (
+        !tableId ||
+        !tableKey ||
+        !tableTitle ||
+        !this.isStructuredSourceType(sourceType) ||
+        rowCount === undefined ||
+        columnCount === undefined
+      ) {
+        return null;
+      }
+
+      const tableSummary: RetrievedTableSummary = {
+        kind: 'table_summary',
+        chunkId,
+        documentId,
+        fileName,
+        text,
+        createdAt,
+        tableId,
+        tableKey,
+        tableTitle,
+        sourceType,
+        rowCount,
+        columnCount,
+        score: point.score,
+      };
+
+      if (pageNumber !== undefined) {
+        tableSummary.pageNumber = pageNumber;
+      }
+
+      return tableSummary;
+    }
+
+    const chunk: RetrievedTextChunk = {
+      kind: 'text',
       chunkId,
       documentId,
       fileName,
@@ -162,5 +215,18 @@ export class QdrantService {
     }
 
     return value;
+  }
+
+  private isStructuredSourceType(
+    value: string | null,
+  ): value is RetrievedTableSummary['sourceType'] {
+    return (
+      value === 'csv' ||
+      value === 'xlsx' ||
+      value === 'json' ||
+      value === 'markdown' ||
+      value === 'docx' ||
+      value === 'pdf'
+    );
   }
 }

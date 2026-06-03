@@ -7,7 +7,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import type { RetrievedChunk } from '../../types/rag.types';
+import type { RagSource } from '../../types/rag.types';
 import { documents } from './documents.schema';
 import { users } from './users.schema';
 
@@ -56,7 +56,7 @@ export const conversationMessages = pgTable('conversation_messages', {
     .$type<ConversationMessageRole>()
     .notNull(),
   content: text('content').notNull(),
-  sources: jsonb('sources').$type<RetrievedChunk[] | null>(),
+  sources: jsonb('sources').$type<RagSource[] | null>(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

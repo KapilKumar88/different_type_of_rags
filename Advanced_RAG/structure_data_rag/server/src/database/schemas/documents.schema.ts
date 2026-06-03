@@ -6,6 +6,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import type { DocumentContentKind } from '../../types/rag.types';
 import { users } from './users.schema';
 
 export const documents = pgTable(
@@ -19,6 +20,14 @@ export const documents = pgTable(
     mimeType: varchar('mime_type', { length: 120 }).notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     chunkCount: integer('chunk_count').notNull(),
+    contentKind: varchar('content_kind', { length: 40 })
+      .$type<DocumentContentKind>()
+      .default('text')
+      .notNull(),
+    structuredTableCount: integer('structured_table_count')
+      .default(0)
+      .notNull(),
+    structuredRowCount: integer('structured_row_count').default(0).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

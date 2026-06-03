@@ -3,6 +3,7 @@ import { DocumentParsingService } from './document-parsing.service';
 import { DocxDocumentParser } from './parsers/docx-document.parser';
 import { PdfDocumentParser } from './parsers/pdf-document.parser';
 import { PlainTextDocumentParser } from './parsers/plain-text-document.parser';
+import { XlsxDocumentParser } from './parsers/xlsx-document.parser';
 
 describe('DocumentParsingService', () => {
   let parsingService: DocumentParsingService;
@@ -12,6 +13,7 @@ describe('DocumentParsingService', () => {
       new PlainTextDocumentParser(),
       new PdfDocumentParser(),
       new DocxDocumentParser(),
+      new XlsxDocumentParser(),
     );
   });
 
@@ -19,6 +21,8 @@ describe('DocumentParsingService', () => {
     expect(parsingService.isSupportedDocument('notes.txt')).toBe(true);
     expect(parsingService.isSupportedDocument('guide.md')).toBe(true);
     expect(parsingService.isSupportedDocument('data.csv')).toBe(true);
+    expect(parsingService.isSupportedDocument('data.json')).toBe(true);
+    expect(parsingService.isSupportedDocument('data.xlsx')).toBe(true);
     expect(parsingService.isSupportedDocument('manual.pdf')).toBe(true);
     expect(parsingService.isSupportedDocument('brief.docx')).toBe(true);
   });
@@ -42,6 +46,7 @@ describe('DocumentParsingService', () => {
 
     expect(result).toEqual({
       pages: [{ text: 'Naive RAG stores document chunks in Qdrant.' }],
+      structuredTables: [],
     });
   });
 

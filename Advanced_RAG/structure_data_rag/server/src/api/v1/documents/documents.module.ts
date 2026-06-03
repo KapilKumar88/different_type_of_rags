@@ -7,6 +7,7 @@ import { DocumentsRepository } from './documents.repository';
 import { DocumentsService } from './documents.service';
 import { DocumentParsingModule } from '../../../services/parsing/document-parsing.module';
 import { DocumentUploadValidationPipe } from './pipes/document-upload-validation.pipe';
+import { StructuredDocumentsRepository } from './structured-documents.repository';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { DocumentUploadValidationPipe } from './pipes/document-upload-validation
   providers: [
     DocumentsService,
     DocumentsRepository,
+    StructuredDocumentsRepository,
     DocumentUploadValidationPipe,
   ],
   exports: [DocumentsService],

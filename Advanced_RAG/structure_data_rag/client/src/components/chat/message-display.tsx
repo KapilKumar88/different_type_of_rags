@@ -1,4 +1,13 @@
-import { Copy, FileText, MessageSquarePlus, Plus, RefreshCw, Sparkles } from "lucide-react";
+import {
+  Copy,
+  Database,
+  FileText,
+  MessageSquarePlus,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Table2,
+} from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -167,31 +176,113 @@ function SourceChunks({ sources }: Readonly<{ sources: SourceChunk[] }>) {
   return (
     <div className="w-full space-y-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-muted-foreground">Retrieved chunks:</span>
-        {sources.map((source) => (
-          <Badge key={source.chunkId} variant="secondary" className="gap-1 font-normal">
-            <FileText className="h-3 w-3" />
-            {source.fileName}
-            {source.pageNumber ? ` · p.${source.pageNumber}` : ""}
-            {` · ${source.score.toFixed(3)}`}
-          </Badge>
-        ))}
+        <span className="text-xs text-muted-foreground">Sources:</span>
+        {sources.map((source) => {
+          const key = getSourceKey(source);
+
+          return (
+            <Badge key={key} variant="secondary" className="gap-1 font-normal">
+              {source.sourceKind === "text" ? (
+                <FileText className="h-3 w-3" />
+              ) : (
+                <Database className="h-3 w-3" />
+              )}
+              {source.fileName}
+              {source.sourceKind === "text" && source.pageNumber ? ` · p.${source.pageNumber}` : ""}
+              {source.sourceKind === "text" ? ` · ${source.score.toFixed(3)}` : ""}
+              {source.sourceKind !== "text" ? ` · ${source.rowCount} rows` : ""}
+            </Badge>
+          );
+        })}
       </div>
       <div className="space-y-2">
         {sources.map((source, index) => (
-          <details key={source.chunkId} className="rounded-lg border border-border bg-muted/30 p-3">
+          <details
+            key={getSourceKey(source)}
+            className="rounded-lg border border-border bg-muted/30 p-3"
+          >
             <summary className="cursor-pointer text-xs font-medium text-foreground">
-              Source {index + 1}: {source.fileName}
-              {source.pageNumber ? ` · page ${source.pageNumber}` : ""}
+              Source {index + 1}: {getSourceTitle(source)}
             </summary>
-            <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
-              {source.text}
-            </p>
+            <SourceDetails source={source} />
           </details>
         ))}
       </div>
     </div>
   );
+}
+
+function SourceDetails({ source }: Readonly<{ source: SourceChunk }>) {
+  if (source.sourceKind === "text") {
+    return (
+      <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+        {source.text}
+      </p>
+    );
+  }
+
+  if (source.sourceKind === "table") {
+    return (
+      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+        <Table2 className="h-3.5 w-3.5" />
+        <span>
+          {source.tableTitle} · {source.sourceLabel} · {source.columnCount} columns ·{" "}
+          {source.rowCount} rows
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 max-h-56 overflow-auto rounded-md border border-border bg-background">
+      <table className="w-full text-left text-xs">
+        <thead className="bg-muted text-muted-foreground">
+          <tr>
+            {source.columns.map((column) => (
+              <th key={column.key} className="px-2 py-1 font-medium">
+                {column.name}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {source.rows.map((row, index) => (
+            <tr key={`${source.tableId}-${index}`} className="border-t border-border">
+              {source.columns.map((column) => (
+                <td key={column.key} className="px-2 py-1 text-muted-foreground">
+                  {formatStructuredCell(row[column.key])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function getSourceKey(source: SourceChunk): string {
+  if (source.sourceKind === "text") {
+    return source.chunkId;
+  }
+
+  return `${source.sourceKind}-${source.tableId}-${source.fileName}`;
+}
+
+function getSourceTitle(source: SourceChunk): string {
+  if (source.sourceKind === "text") {
+    return `${source.fileName}${source.pageNumber ? ` · page ${source.pageNumber}` : ""}`;
+  }
+
+  return `${source.fileName} · ${source.tableTitle}`;
+}
+
+function formatStructuredCell(value: string | number | boolean | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value);
 }
 
 function StreamingDots() {

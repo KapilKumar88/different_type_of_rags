@@ -33,11 +33,9 @@ describe('DocumentUploadValidationPipe', () => {
     const file = createFile();
 
     expect(pipe.transform(file)).toBe(file);
-    expect(documentParsingService.validateDocumentFileType).toHaveBeenCalledWith(
-      'rag-notes.txt',
-      'text/plain',
-      file.buffer,
-    );
+    expect(
+      documentParsingService.validateDocumentFileType,
+    ).toHaveBeenCalledWith('rag-notes.txt', 'text/plain', file.buffer);
   });
 
   it('rejects missing files', () => {

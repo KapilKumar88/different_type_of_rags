@@ -29,12 +29,26 @@ const envSchema = z
     AUTH_RATE_LIMIT_LIMIT: z.coerce.number().int().positive().default(5),
     CSRF_COOKIE_NAME: z.string().min(1).default('rag_csrf_token'),
     CSRF_SECRET: z.string().min(32).default(defaultCsrfSecret),
-    QDRANT_URL: z.url().default('http://localhost:6333'),
-    QDRANT_COLLECTION: z.string().min(1).default('documents'),
-    QDRANT_VECTOR_SIZE: z.coerce.number().int().positive().default(768),
+    NEO4J_URI: z.string().min(1).default('bolt://localhost:7687'),
+    NEO4J_USERNAME: z.string().min(1).default('neo4j'),
+    NEO4J_PASSWORD: z.string().min(1).default('password'),
+    NEO4J_DATABASE: z.string().min(1).default('neo4j'),
     OLLAMA_BASE_URL: z.url().default('http://localhost:11434'),
-    OLLAMA_EMBEDDING_MODEL: z.string().min(1).default('nomic-embed-text:v1.5'),
     OLLAMA_LLM_MODEL: z.string().min(1).default('minimax-m2.5:cloud'),
+    GRAPH_MAX_HOPS: z.coerce.number().int().positive().default(2),
+    GRAPH_ENTITY_SEED_LIMIT: z.coerce.number().int().positive().default(5),
+    GRAPH_NEIGHBOR_LIMIT: z.coerce.number().int().positive().default(20),
+    GRAPH_MAX_CONTEXT_CHARACTERS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(6000),
+    GRAPH_MAX_ENTITIES_PER_CHUNK: z.coerce.number().int().positive().default(8),
+    GRAPH_MAX_RELATIONSHIPS_PER_CHUNK: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(10),
     RAG_TOP_K: z.coerce.number().int().positive().default(5),
     RAG_UPLOAD_RATE_LIMIT_TTL_MS: z.coerce
       .number()

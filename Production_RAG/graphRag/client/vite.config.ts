@@ -29,6 +29,17 @@ function getManualChunk(id: string): string | undefined {
   }
 
   if (
+    normalizedId.includes("/node_modules/react-force-graph-2d/") ||
+    normalizedId.includes("/node_modules/force-graph/") ||
+    normalizedId.includes("/node_modules/d3-force/") ||
+    normalizedId.includes("/node_modules/d3-quadtree/") ||
+    normalizedId.includes("/node_modules/d3-timer/") ||
+    normalizedId.includes("/node_modules/d3-dispatch/")
+  ) {
+    return "vendor-graph";
+  }
+
+  if (
     normalizedId.includes("/node_modules/react-markdown/") ||
     normalizedId.includes("/node_modules/remark-gfm/") ||
     normalizedId.includes("/node_modules/remark-parse/") ||

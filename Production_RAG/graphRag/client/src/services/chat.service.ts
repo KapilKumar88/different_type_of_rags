@@ -12,6 +12,7 @@ import type {
   DeleteConversationResponse,
   DoneStreamEvent,
   ErrorStreamEvent,
+  GraphStreamEvent,
   SourcesStreamEvent,
   TokenStreamEvent,
   UpdateConversationDocumentsPayload,
@@ -97,6 +98,10 @@ export const chatService = {
       `${apiConfig.baseUrl}${apiConfig.endpoints.chat.messageStream(conversationId, messageId)}`,
       { withCredentials: true },
     );
+
+    eventSource.addEventListener("graph", (event) => {
+      handlers.onGraph?.(parseStreamEvent<GraphStreamEvent>(event));
+    });
 
     eventSource.addEventListener("sources", (event) => {
       handlers.onSources?.(parseStreamEvent<SourcesStreamEvent>(event));

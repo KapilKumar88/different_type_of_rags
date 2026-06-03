@@ -61,7 +61,9 @@ describe('Auth API (e2e)', () => {
   let app: INestApplication<App>;
   let users: User[];
 
-  function normalizeCookieHeader(cookies: string | string[] | undefined): string {
+  function normalizeCookieHeader(
+    cookies: string | string[] | undefined,
+  ): string {
     if (!cookies) {
       return '';
     }
@@ -79,7 +81,7 @@ describe('Auth API (e2e)', () => {
 
     const tokenResponse = await tokenRequest.expect(200);
     const csrfCookieHeader = normalizeCookieHeader(
-      tokenResponse.headers['set-cookie'] as string | string[] | undefined,
+      tokenResponse.headers['set-cookie'],
     );
     const cookieHeader = [existingCookieHeader, csrfCookieHeader]
       .filter(Boolean)
@@ -141,9 +143,7 @@ describe('Auth API (e2e)', () => {
       const response = await request(app.getHttpServer())
         .get('/api/v1/csrf-token')
         .expect(200);
-      const setCookie = normalizeCookieHeader(
-        response.headers['set-cookie'] as string | string[] | undefined,
-      );
+      const setCookie = normalizeCookieHeader(response.headers['set-cookie']);
 
       expect(response.body).toEqual({
         success: true,
@@ -258,7 +258,11 @@ describe('Auth API (e2e)', () => {
 
   describe('POST /api/v1/auth/register — input validation', () => {
     async function registerExpect422(payload: Record<string, unknown>) {
-      const response = await postWithCsrf('/api/v1/auth/register', payload, 422);
+      const response = await postWithCsrf(
+        '/api/v1/auth/register',
+        payload,
+        422,
+      );
 
       expect(response.body.success).toBe(false);
       expect(response.body.message).toBe('Validation failed');
@@ -267,7 +271,11 @@ describe('Auth API (e2e)', () => {
 
     it('rejects when name is missing', async () => {
       const { email, password, confirmPassword } = VALID_REGISTER_PAYLOAD;
-      const errors = await registerExpect422({ email, password, confirmPassword });
+      const errors = await registerExpect422({
+        email,
+        password,
+        confirmPassword,
+      });
       expect(errors.name).toBeDefined();
       expect(errors.name.length).toBeGreaterThan(0);
     });
@@ -508,7 +516,10 @@ describe('Auth API (e2e)', () => {
     });
 
     it('rejects an invalid email format', async () => {
-      const errors = await loginExpect422({ email: 'not-an-email', password: 'TestPass123' });
+      const errors = await loginExpect422({
+        email: 'not-an-email',
+        password: 'TestPass123',
+      });
       expect(errors.email).toBeDefined();
       expect(errors.email.length).toBeGreaterThan(0);
     });
@@ -519,7 +530,10 @@ describe('Auth API (e2e)', () => {
     });
 
     it('rejects a password shorter than 8 characters', async () => {
-      const errors = await loginExpect422({ email: 'ada@example.com', password: 'short' });
+      const errors = await loginExpect422({
+        email: 'ada@example.com',
+        password: 'short',
+      });
       expect(errors.password).toBeDefined();
       expect(errors.password.length).toBeGreaterThan(0);
     });
@@ -685,7 +699,10 @@ describe('Auth API (e2e)', () => {
     it('returns 401 for a tampered JWT (invalid signature)', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/v1/auth/me')
-        .set('Cookie', 'rag_auth_token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEiLCJlbWFpbCI6ImFkYUBleGFtcGxlLmNvbSJ9.INVALID_SIGNATURE')
+        .set(
+          'Cookie',
+          'rag_auth_token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEiLCJlbWFpbCI6ImFkYUBleGFtcGxlLmNvbSJ9.INVALID_SIGNATURE',
+        )
         .expect(401);
 
       expect(response.body.success).toBe(false);
@@ -734,7 +751,7 @@ describe('Auth API (e2e)', () => {
         '/api/v1/auth/logout',
         undefined,
         200,
-        registerResponse.headers['set-cookie'] as string | string[],
+        registerResponse.headers['set-cookie'],
       );
 
       const setCookie = response.headers['set-cookie'] as string | string[];

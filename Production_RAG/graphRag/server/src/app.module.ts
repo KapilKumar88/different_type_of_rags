@@ -9,6 +9,7 @@ import { authRateLimitConfig } from './config/auth-rate-limit.config';
 import { ragRateLimitConfig } from './config/rag-rate-limit.config';
 import { JwtAuthGuard } from './guard/auth/jwt-auth.guard';
 import { DatabaseModule } from './services/database/database.module';
+import { Neo4jModule } from './services/neo4j/neo4j.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { DatabaseModule } from './services/database/database.module';
       },
     ]),
     DatabaseModule,
+    Neo4jModule,
     AuthModule,
     CsrfModule,
     DocumentsModule,

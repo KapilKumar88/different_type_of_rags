@@ -17,6 +17,9 @@ const ChatPage = React.lazy(() =>
 const DocumentsPage = React.lazy(() =>
   import("@/routes/app.documents").then((module) => ({ default: module.DocumentsPage })),
 );
+const GraphPage = React.lazy(() =>
+  import("@/routes/app.graph").then((module) => ({ default: module.GraphPage })),
+);
 const LoginPage = React.lazy(() =>
   import("@/routes/login").then((module) => ({ default: module.LoginPage })),
 );
@@ -57,6 +60,7 @@ const router = createBrowserRouter([
               { index: true, element: <Navigate to="/app/chat" replace /> },
               { path: "chat", element: withRouteSuspense(<ChatPage />) },
               { path: "documents", element: withRouteSuspense(<DocumentsPage />) },
+              { path: "graph", element: withRouteSuspense(<GraphPage />) },
             ],
           },
         ],

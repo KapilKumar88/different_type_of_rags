@@ -71,7 +71,9 @@ describe('JwtAuthGuard', () => {
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
 
-    expect(authService.getAuthenticatedUser).toHaveBeenCalledWith('signed-token');
+    expect(authService.getAuthenticatedUser).toHaveBeenCalledWith(
+      'signed-token',
+    );
     expect(request.user).toEqual(user);
   });
 });

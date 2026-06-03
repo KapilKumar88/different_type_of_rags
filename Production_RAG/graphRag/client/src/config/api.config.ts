@@ -19,6 +19,9 @@ export const apiConfig = {
       list: "/api/v1/documents",
       delete: (id: string) => `/api/v1/documents/${pathSegment(id)}`,
     },
+    graph: {
+      documentGraph: (id: string) => `/api/v1/graph/documents/${pathSegment(id)}`,
+    },
     chat: {
       conversations: "/api/v1/chat/conversations",
       conversation: (id: string) => `/api/v1/chat/conversations/${pathSegment(id)}`,

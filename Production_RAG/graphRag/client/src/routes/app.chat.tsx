@@ -408,6 +408,19 @@ export function ChatPage() {
     setStreaming(true);
 
     streamCleanupRef.current = chatService.streamMessage(conversationId, userMessageId, {
+      onGraph: ({ entities, relationships }) => {
+        if (activeStreamIdRef.current !== streamId) {
+          return;
+        }
+
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === pendingId
+              ? { ...message, graphContext: { entities, relationships } }
+              : message,
+          ),
+        );
+      },
       onSources: ({ sources }) => {
         if (activeStreamIdRef.current !== streamId) {
           return;

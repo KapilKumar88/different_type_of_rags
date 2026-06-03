@@ -1,9 +1,8 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { documentUploadConfig } from '../../../config/document-upload.config';
 import type { Document } from '../../../database/schemas';
-import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
-import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
+import { GraphService } from '../graph/graph.service';
 import { DocumentsRepository } from './documents.repository';
 import {
   DocumentsService,
@@ -35,17 +34,18 @@ function createFile(
     originalname: 'rag-notes.txt',
     mimetype: 'text/plain',
     size: 42,
-    buffer: Buffer.from('Naive RAG retrieves chunks from Qdrant.'),
+    buffer: Buffer.from(
+      'Graph RAG builds a knowledge graph from document chunks.',
+    ),
     ...overrides,
   };
 }
 
 describe('DocumentsService', () => {
   let documentsRepository: jest.Mocked<DocumentsRepository>;
-  let embeddingsService: jest.Mocked<EmbeddingsService>;
-  let qdrantService: jest.Mocked<QdrantService>;
   let documentParsingService: jest.Mocked<DocumentParsingService>;
   let ragConcurrencyLimiter: jest.Mocked<RagConcurrencyLimiterService>;
+  let graphService: jest.Mocked<GraphService>;
   let documentsService: DocumentsService;
 
   beforeEach(() => {
@@ -56,13 +56,6 @@ describe('DocumentsService', () => {
       findByIdsForUser: jest.fn(),
       deleteByIdForUser: jest.fn(),
     } as unknown as jest.Mocked<DocumentsRepository>;
-    embeddingsService = {
-      embedDocuments: jest.fn(),
-    } as unknown as jest.Mocked<EmbeddingsService>;
-    qdrantService = {
-      upsertPoints: jest.fn(),
-      deleteByDocumentId: jest.fn(),
-    } as unknown as jest.Mocked<QdrantService>;
     documentParsingService = {
       isSupportedDocument: jest.fn(),
       validateDocumentFileType: jest.fn(),
@@ -79,18 +72,26 @@ describe('DocumentsService', () => {
     ragConcurrencyLimiter = {
       run: jest.fn(async (_key, task: () => Promise<unknown>) => task()),
     } as unknown as jest.Mocked<RagConcurrencyLimiterService>;
+    graphService = {
+      extractFromChunks: jest
+        .fn()
+        .mockResolvedValue([{ entities: [], relationships: [] }]),
+      buildDocumentGraph: jest.fn().mockResolvedValue(undefined),
+      deleteDocumentGraph: jest.fn().mockResolvedValue(undefined),
+      retrieveGraphContext: jest.fn(),
+      getDocumentGraph: jest.fn(),
+      createChunkId: jest.fn(),
+    } as unknown as jest.Mocked<GraphService>;
     documentsService = new DocumentsService(
       documentsRepository,
-      embeddingsService,
-      qdrantService,
       documentParsingService,
       ragConcurrencyLimiter,
+      graphService,
     );
   });
 
-  it('extracts, chunks, embeds, stores vectors, and saves document metadata', async () => {
+  it('extracts, chunks, builds graph, and saves document metadata', async () => {
     const document = createDocument();
-    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
     documentsRepository.create.mockResolvedValue(document);
 
     const result = await documentsService.upload('user-1', createFile());
@@ -100,18 +101,20 @@ describe('DocumentsService', () => {
       'text/plain',
       expect.any(Buffer),
     );
-    expect(embeddingsService.embedDocuments).toHaveBeenCalledWith([
-      'Naive RAG retrieves chunks from Qdrant.',
-    ]);
-    expect(qdrantService.upsertPoints).toHaveBeenCalledWith([
-      expect.objectContaining({
-        vector: Array(768).fill(0.1),
-        payload: expect.objectContaining({
-          fileName: 'rag-notes.txt',
-          text: 'Naive RAG retrieves chunks from Qdrant.',
+    expect(graphService.extractFromChunks).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: 'Graph RAG builds a knowledge graph from document chunks.',
         }),
-      }),
-    ]);
+      ]),
+    );
+    expect(graphService.buildDocumentGraph).toHaveBeenCalledWith(
+      'user-1',
+      expect.any(String),
+      'rag-notes.txt',
+      expect.any(Array),
+      expect.any(Array),
+    );
     expect(documentsRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         fileName: 'rag-notes.txt',
@@ -124,52 +127,29 @@ describe('DocumentsService', () => {
     expect(result).toBe(document);
   });
 
-  it('keeps parser page numbers on vector payloads', async () => {
-    const document = createDocument();
-    documentParsingService.parseDocument.mockResolvedValue({
-      pages: [{ text: 'Page specific text', pageNumber: 4 }],
-    });
-    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.2)]);
-    documentsRepository.create.mockResolvedValue(document);
-
-    await documentsService.upload('user-1', createFile());
-
-    expect(qdrantService.upsertPoints).toHaveBeenCalledWith([
-      expect.objectContaining({
-        payload: expect.objectContaining({
-          text: 'Page specific text',
-          pageNumber: 4,
-        }),
-      }),
-    ]);
-  });
-
-  it('cleans up uploaded vectors when metadata creation fails', async () => {
+  it('cleans up graph when metadata creation fails', async () => {
     const databaseError = new Error('database unavailable');
-    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
     documentsRepository.create.mockRejectedValue(databaseError);
 
     await expect(
       documentsService.upload('user-1', createFile()),
     ).rejects.toThrow(databaseError);
 
-    const upsertedPoints = qdrantService.upsertPoints.mock.calls[0]?.[0];
-    const documentId = upsertedPoints?.[0]?.payload.documentId;
-    expect(documentId).toEqual(expect.any(String));
-    expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(documentId);
+    expect(graphService.deleteDocumentGraph).toHaveBeenCalledWith(
+      'user-1',
+      expect.any(String),
+    );
   });
 
-  it('does not create metadata when Qdrant upsert fails', async () => {
-    const qdrantError = new Error('qdrant unavailable');
-    embeddingsService.embedDocuments.mockResolvedValue([Array(768).fill(0.1)]);
-    qdrantService.upsertPoints.mockRejectedValue(qdrantError);
+  it('does not create metadata when graph build fails', async () => {
+    const graphError = new Error('neo4j unavailable');
+    graphService.buildDocumentGraph.mockRejectedValue(graphError);
 
     await expect(
       documentsService.upload('user-1', createFile()),
-    ).rejects.toThrow(qdrantError);
+    ).rejects.toThrow(graphError);
 
     expect(documentsRepository.create).not.toHaveBeenCalled();
-    expect(qdrantService.deleteByDocumentId).not.toHaveBeenCalled();
   });
 
   it('rejects documents with no readable text', async () => {
@@ -195,7 +175,7 @@ describe('DocumentsService', () => {
         }),
       ),
     ).rejects.toThrow('Document text is too large to index');
-    expect(embeddingsService.embedDocuments).not.toHaveBeenCalled();
+    expect(graphService.extractFromChunks).not.toHaveBeenCalled();
   });
 
   it('rejects documents that create too many chunks', async () => {
@@ -210,7 +190,7 @@ describe('DocumentsService', () => {
         }),
       ),
     ).rejects.toThrow('Document has too many chunks to index');
-    expect(embeddingsService.embedDocuments).not.toHaveBeenCalled();
+    expect(graphService.extractFromChunks).not.toHaveBeenCalled();
   });
 
   it('lists only documents owned by the user', async () => {
@@ -234,7 +214,7 @@ describe('DocumentsService', () => {
     );
   });
 
-  it('deletes vectors and metadata for an existing document', async () => {
+  it('deletes graph and metadata for an existing document', async () => {
     const document = createDocument();
     documentsRepository.findByIdForUser.mockResolvedValue(document);
     documentsRepository.deleteByIdForUser.mockResolvedValue(document);
@@ -245,7 +225,10 @@ describe('DocumentsService', () => {
       'user-1',
       document.id,
     );
-    expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(document.id);
+    expect(graphService.deleteDocumentGraph).toHaveBeenCalledWith(
+      'user-1',
+      document.id,
+    );
     expect(documentsRepository.deleteByIdForUser).toHaveBeenCalledWith(
       'user-1',
       document.id,
@@ -253,40 +236,40 @@ describe('DocumentsService', () => {
     expect(result).toBe(document);
   });
 
-  it('does not delete metadata when Qdrant deletion fails', async () => {
+  it('does not delete metadata when graph deletion fails', async () => {
     const document = createDocument();
-    const qdrantError = new Error('qdrant unavailable');
+    const graphError = new Error('neo4j unavailable');
     documentsRepository.findByIdForUser.mockResolvedValue(document);
-    qdrantService.deleteByDocumentId.mockRejectedValueOnce(qdrantError);
+    graphService.deleteDocumentGraph.mockRejectedValueOnce(graphError);
 
     await expect(
       documentsService.delete('user-1', document.id),
-    ).rejects.toThrow(qdrantError);
+    ).rejects.toThrow(graphError);
 
     expect(documentsRepository.deleteByIdForUser).not.toHaveBeenCalled();
   });
 
-  it('can retry document deletion after a transient Qdrant failure', async () => {
+  it('can retry document deletion after a transient graph failure', async () => {
     const document = createDocument();
-    const qdrantError = new Error('qdrant unavailable');
+    const graphError = new Error('neo4j unavailable');
     documentsRepository.findByIdForUser.mockResolvedValue(document);
-    qdrantService.deleteByDocumentId
-      .mockRejectedValueOnce(qdrantError)
+    graphService.deleteDocumentGraph
+      .mockRejectedValueOnce(graphError)
       .mockResolvedValueOnce(undefined);
     documentsRepository.deleteByIdForUser.mockResolvedValue(document);
 
     await expect(
       documentsService.delete('user-1', document.id),
-    ).rejects.toThrow(qdrantError);
+    ).rejects.toThrow(graphError);
     await expect(documentsService.delete('user-1', document.id)).resolves.toBe(
       document,
     );
 
-    expect(qdrantService.deleteByDocumentId).toHaveBeenCalledTimes(2);
+    expect(graphService.deleteDocumentGraph).toHaveBeenCalledTimes(2);
     expect(documentsRepository.deleteByIdForUser).toHaveBeenCalledTimes(1);
   });
 
-  it('propagates metadata deletion failures after Qdrant cleanup so callers can retry', async () => {
+  it('propagates metadata deletion failures after graph cleanup so callers can retry', async () => {
     const document = createDocument();
     const databaseError = new Error('database unavailable');
     documentsRepository.findByIdForUser.mockResolvedValue(document);
@@ -296,7 +279,10 @@ describe('DocumentsService', () => {
       documentsService.delete('user-1', document.id),
     ).rejects.toThrow(databaseError);
 
-    expect(qdrantService.deleteByDocumentId).toHaveBeenCalledWith(document.id);
+    expect(graphService.deleteDocumentGraph).toHaveBeenCalledWith(
+      'user-1',
+      document.id,
+    );
     expect(documentsRepository.deleteByIdForUser).toHaveBeenCalledWith(
       'user-1',
       document.id,
@@ -309,6 +295,6 @@ describe('DocumentsService', () => {
     await expect(
       documentsService.delete('user-1', 'd79d5e51-4b9e-4db8-9440-961f98d4f61a'),
     ).rejects.toBeInstanceOf(NotFoundException);
-    expect(qdrantService.deleteByDocumentId).not.toHaveBeenCalled();
+    expect(graphService.deleteDocumentGraph).not.toHaveBeenCalled();
   });
 });

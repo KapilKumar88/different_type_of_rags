@@ -58,7 +58,7 @@ Client now has real auth/session handling, typed API services, TanStack Query pr
 
 ## Server Current Map
 
-Current stack: NestJS 11, TypeScript, Drizzle ORM, Postgres driver, Zod, JWT, cookie-parser, csrf-csrf, Helmet, bcryptjs, `@nestjs/throttler`, Qdrant JS client, LangChain Ollama integration, LangChain text splitters, pdf-parse, mammoth, and Multer. The backend has real auth and Naive RAG domain modules.
+Current stack: NestJS 11, TypeScript, Drizzle ORM, Postgres driver, Zod, JWT, cookie-parser, csrf-csrf, Helmet, bcryptjs, `@nestjs/throttler`, **neo4j-driver 6.0.1**, LangChain Ollama integration, LangChain text splitters, pdf-parse, mammoth, and Multer. The backend has real auth and **Graph RAG** domain modules. Qdrant and Ollama embeddings are **removed** from this project variation.
 
 Important files:
 
@@ -68,31 +68,32 @@ Important files:
 | `server/src/app.module.ts`                            | Root module registering shared throttler config, database module, auth module, CSRF token module, documents module, chat module, and global JWT auth guard.                                                                                               |
 | `server/src/api/v1/auth/*`                            | Auth module with register, login, logout, and current-user endpoints, plus controller/service/repository layering, throttling, and tests.                                                                                                                 |
 | `server/src/api/v1/csrf/*`                            | Public CSRF token endpoint for SPA double-submit token flow.                                                                                                                                                                                              |
-| `server/src/api/v1/documents/*`                       | Documents module with user-scoped upload/list/delete endpoints, upload validation, injectable parsing module, recursive chunking, embedding generation, Qdrant upsert/delete compensation, Postgres metadata repository, and focused tests.               |
-| `server/src/api/v1/chat/*`                            | Chat module with persisted conversations/messages, conversation document membership, scoped Qdrant retrieval, bounded prompt construction, SSE answer streaming, rename/scope/delete endpoints, and focused tests.                                        |
-| `server/src/services/qdrant/*`                        | Shared Qdrant module that ensures collection creation, upserts vector points, searches by selected document IDs, and deletes points by `documentId`.                                                                                                      |
-| `server/src/services/embeddings/*`                    | Shared Ollama embeddings module using `nomic-embed-text:v1.5` and validating vector size against config.                                                                                                                                                  |
-| `server/src/services/llm/*`                           | Shared Ollama chat module using configured local/cloud Ollama model for final answer generation.                                                                                                                                                          |
+| `server/src/api/v1/documents/*`                       | Documents module with user-scoped upload/list/delete endpoints, upload validation, injectable parsing module, recursive chunking, **graph extraction per chunk**, **Neo4j graph build/delete compensation**, Postgres metadata repository, and focused tests. |
+| `server/src/api/v1/chat/*`                            | Chat module with persisted conversations/messages, conversation document membership, **graph traversal retrieval**, bounded prompt construction with graph entity/relationship sections, SSE answer streaming (includes new `graph` event), rename/scope/delete endpoints, and focused tests. |
+| `server/src/api/v1/graph/*`                           | Graph domain module: `GraphRepository` (all Cypher), `GraphService` (build/retrieve/visualize/delete), `GraphController` (`GET /api/v1/graph/documents/:id`). |
+| `server/src/services/neo4j/*`                         | Global Neo4j service: driver lifecycle, `read()`/`write()` helpers, `ensureConstraints()` (unique/composite indexes + full-text index on `Entity(name, description)`). |
+| `server/src/services/graph-extraction/*`              | LLM-based entity/relationship extraction per chunk: strict JSON prompt, Zod-parsed output, capped counts, normalized names. |
+| `server/src/services/llm/*`                           | Shared Ollama chat module using configured local/cloud Ollama model for final answer generation and graph extraction calls.                                                                                                                                 |
 | `server/src/services/parsing/*`                       | Shared document parsing module with parser classes for text-like files, PDF, and DOCX.                                                                                                                                                                    |
-| `server/src/services/rag-runtime/*`                   | In-process concurrency limiter for expensive RAG operations such as parsing, embeddings, Qdrant calls, and LLM streaming.                                                                                                                                 |
+| `server/src/services/rag-runtime/*`                   | In-process concurrency limiter for expensive RAG operations: parsing, graph extraction, LLM streaming. Slots: `document-parsing`, `graph-extraction`, `llm-stream`.                                                                                       |
 | `server/src/common/filters/http-exception.filter.ts`  | Standardizes Nest HTTP errors into `{ success, message, data }`.                                                                                                                                                                                          |
 | `server/src/common/security/csrf-protection.ts`       | Shared `csrf-csrf` double-submit cookie protection and token generation helpers.                                                                                                                                                                          |
 | `server/src/common/security/security-headers.ts`      | Shared Helmet setup for HTTP security headers, including `X-Frame-Options: DENY`.                                                                                                                                                                         |
 | `server/src/common/pipes/zod-validation.pipe.ts`      | Reusable Zod request validation pipe returning `422` validation errors.                                                                                                                                                                                   |
-| `server/src/config/*`                                 | Typed config modules for app, database, JWT, cookies, auth rate limits, CSRF, Qdrant, Ollama, RAG settings, and environment parsing. `env.ts` loads server `.env` values before Zod validation while preserving real environment variable precedence.     |
+| `server/src/config/*`                                 | Typed config modules for app, database, JWT, cookies, auth rate limits, CSRF, **Neo4j**, Ollama, **Graph**, RAG settings, and environment parsing. `env.ts` loads server `.env` values before Zod validation. **Removed**: `qdrant.config.ts`; `QDRANT_*` and `OLLAMA_EMBEDDING_MODEL` env vars removed. |
 | `server/src/database/schemas/users.schema.ts`         | Drizzle users table schema with unique email constraint and password hash.                                                                                                                                                                                |
-| `server/src/database/schemas/documents.schema.ts`     | Drizzle user-owned documents metadata table schema. Chunk text and vectors are stored in Qdrant payloads, not Postgres.                                                                                                                                   |
-| `server/src/database/schemas/conversations.schema.ts` | Drizzle conversations, conversation-document join table, and conversation message schema with cascade cleanup.                                                                                                                                            |
-| `server/src/database/migrations/*`                    | Drizzle migrations for users and documents metadata tables.                                                                                                                                                                                               |
+| `server/src/database/schemas/documents.schema.ts`     | Drizzle user-owned documents metadata table schema. Chunk text and graph data are stored in **Neo4j**, not Qdrant.                                                                                                                                        |
+| `server/src/database/schemas/conversations.schema.ts` | Drizzle conversations, conversation-document join table, and conversation message schema. `conversation_messages` now has a `graph_context jsonb` column (migration 0004).                                                                               |
+| `server/src/database/migrations/*`                    | Drizzle migrations through 0004 (`graph_context` column on `conversation_messages`).                                                                                                                                                                     |
 | `server/src/guard/*`                                  | Global JWT auth guard, `@Public()`, `@CurrentUser()`, and authenticated request typing.                                                                                                                                                                   |
 | `server/src/services/database/*`                      | Global Drizzle database module/service backed by Postgres.                                                                                                                                                                                                |
 | `server/src/app.controller.spec.ts`                   | Default unit test for `GET /`.                                                                                                                                                                                                                            |
 | `server/test/app.e2e-spec.ts`                         | Default e2e test scaffold.                                                                                                                                                                                                                                |
-| `server/.env.example`                                 | Documents app, database, JWT, auth cookie, Qdrant, Ollama, and RAG configuration.                                                                                                                                                                         |
+| `server/.env.example`                                 | Documents app, database, JWT, auth cookie, **Neo4j**, Ollama (LLM only), Graph RAG, and rate-limit configuration. Qdrant and embedding vars removed.                                                                                                     |
 | `server/drizzle.config.ts`                            | Drizzle Kit config for schemas and migrations.                                                                                                                                                                                                            |
 | `server/package.json`                                 | Nest scripts plus Drizzle migration scripts and auth/database dependencies.                                                                                                                                                                               |
 
-Server now has auth, users/documents/conversations table schemas, Drizzle database foundation, Zod validation, typed config, standardized HTTP error responses, cookie/JWT auth guards, document ingestion, upload hardening, Qdrant vector search, Ollama embeddings/LLM calls, persisted conversation history, document-scoped retrieval, SSE Naive RAG chat, RAG throttling/concurrency controls, prompt context boundaries, and safe SSE error mapping. Server still does not have Redis, BullMQ queues, Socket.io, LangGraph, hybrid search, reranking, or agentic memory.
+Server now has auth, users/documents/conversations table schemas, Drizzle database foundation, Zod validation, typed config, standardized HTTP error responses, cookie/JWT auth guards, **Graph RAG**: document ingestion with LLM entity/relationship extraction → Neo4j knowledge graph, graph traversal retrieval (entity linking + neighborhood expansion), SSE chat streaming with `graph`/`sources`/`token`/`done`/`error` events, persisted `graphContext` on assistant messages, `/api/v1/graph/documents/:id` visualization endpoint, upload/chat/stream throttles, in-process concurrency limits, prompt context boundaries with graph entity/relationship sections, and safe SSE error mapping. **Removed**: Qdrant vector search, Ollama embeddings. Still does not have Redis, BullMQ queues, Socket.io, LangGraph, hybrid search, reranking, or agentic memory.
 
 ## Auth Module Current State
 
@@ -118,53 +119,39 @@ Auth API response contracts:
 - Safe user shape is `{ id, name, email }`; `passwordHash` is never returned.
 - Auth session is an HttpOnly cookie named by `AUTH_COOKIE_NAME` (`rag_auth_token` by default).
 
-## Naive RAG Module Current State
+## Graph RAG Module Current State
 
 Implemented backend APIs are protected by the existing cookie JWT guard:
 
 - `POST /api/v1/documents/upload`
-  - Accepts multipart field `file`.
-  - Supports `.txt`, `.md`, `.csv`, `.pdf`, and `.docx`.
-  - Requires an authenticated user; saved document metadata includes `userId`, and list/delete operations are user-scoped.
-  - Enforces server-side file size, extension, MIME, content-signature, extracted-character, and chunk-count limits before expensive RAG writes.
-  - Parses text through `DocumentParsingService`, which delegates to file-family parser classes for text-like files, PDF, and DOCX. The parser contract is text-only today but is the extension point for future PDF/DOCX table or image extraction.
-  - Splits parsed text with `RecursiveCharacterTextSplitter` using chunk size `800` and overlap `100`, embeds chunks with Ollama, stores one Qdrant point per chunk, then saves document metadata in Postgres.
-  - If Postgres metadata creation fails after Qdrant upsert, the upload path compensates by deleting the just-created Qdrant points.
-  - Qdrant payload fields: `chunkId`, `documentId`, `fileName`, `text`, `pageNumber` when available, and `createdAt`.
+  - Accepts multipart field `file`. Supports `.txt`, `.md`, `.csv`, `.pdf`, and `.docx`.
+  - Parses → chunks → **LLM extraction per chunk** (entities + relationships, Zod-validated JSON) → **Neo4j graph build** (Entity nodes, Chunk nodes, MENTIONED_IN + RELATED edges) → Postgres metadata.
+  - Compensation: if Postgres metadata write fails, the Neo4j graph for that document is deleted.
   - Success response: `{ success, message, data: { document } }`.
-- `GET /api/v1/documents`
-  - Returns `{ success, message, data: { documents } }`.
-- `DELETE /api/v1/documents/:id`
-  - Confirms the document belongs to the authenticated user, deletes matching Qdrant points by payload `documentId`, then deletes Postgres metadata.
-  - Qdrant delete failures leave metadata untouched so the delete can be retried.
-  - Returns `{ success, message, data: { document } }`.
-- `GET /api/v1/chat/conversations`
-  - Returns the authenticated user's conversations with `documentIds`, ordered by most recently updated.
-- `POST /api/v1/chat/conversations`
-  - Validates `{ title?, documentIds }`, deduplicates and validates document IDs, creates a conversation and document membership rows, and returns `{ conversation }`.
-- `GET /api/v1/chat/conversations/:conversationId`
-  - Returns an owned conversation with `documentIds` and ordered persisted messages.
-- `PATCH /api/v1/chat/conversations/:conversationId`
-  - Validates `{ title }`, confirms ownership, updates `title`/`updatedAt`, and returns `{ conversation }`.
-- `PATCH /api/v1/chat/conversations/:conversationId/documents`
-  - Validates `{ documentIds }`, confirms ownership, deduplicates and validates document IDs, transactionally replaces document membership, and returns `{ conversation }`.
-- `DELETE /api/v1/chat/conversations/:conversationId`
-  - Confirms ownership, hard-deletes the conversation, and relies on FK cascade to delete messages and join rows. Documents are not deleted.
-- `POST /api/v1/chat/conversations/:conversationId/messages`
-  - Validates `{ content }`, confirms ownership, persists a user message, updates conversation `updatedAt`, and returns `{ message }`.
+- `GET /api/v1/documents` — returns `{ data: { documents } }`.
+- `DELETE /api/v1/documents/:id` — deletes Neo4j graph, then Postgres metadata. Graph delete failures block metadata deletion (retryable).
+- `GET /api/v1/graph/documents/:documentId` — returns `{ data: { graph: { nodes, edges } } }` for a user-owned document. Used by the client visualization page.
+- All existing conversation/message endpoints remain unchanged.
 - `GET /api/v1/chat/conversations/:conversationId/messages/:messageId/stream`
-  - SSE endpoint for an owned persisted user message. Validates conversation ownership before message lookup, retrieves only selected conversation documents from Qdrant, emits `sources`, `token`, `done`, and `error` events, and persists the assistant message on completion.
-  - Prompt construction separates system rules from `<retrieved_context>`, `<conversation_history>`, and `<latest_user_message>`, treats retrieved/history text as untrusted content, and bounds context/history length.
-  - Stream errors are stable public payloads with codes such as `not_found`, `bad_request`, and `stream_failed`; raw dependency errors are not emitted.
-RAG runtime config:
+  - SSE endpoint. Retrieval now: extract query entities via LLM → full-text index search in Neo4j → BFS neighborhood traversal up to `GRAPH_MAX_HOPS` hops → fetch Chunk texts for found entities.
+  - Emits events in order: **`graph`** `{ entities, relationships }`, `sources` (chunk texts as RetrievedChunk shape), `token`×N, `done`. Plus `error` on failure.
+  - Prompt construction uses `<graph_entities>`, `<graph_relationships>`, `<retrieved_context>`, `<conversation_history>`, `<latest_user_message>` sections; all untrusted.
+  - Persists assistant message with `sources` and `graphContext` (jsonb) columns.
 
-- `QDRANT_URL`, default `http://localhost:6333`
-- `QDRANT_COLLECTION`, default `documents`
-- `QDRANT_VECTOR_SIZE`, default `768`
+Graph RAG runtime config:
+
+- `NEO4J_URI`, default `bolt://localhost:7687`
+- `NEO4J_USERNAME`, default `neo4j`
+- `NEO4J_PASSWORD`, default `password`
+- `NEO4J_DATABASE`, default `neo4j`
 - `OLLAMA_BASE_URL`, default `http://localhost:11434`
-- `OLLAMA_EMBEDDING_MODEL`, default `nomic-embed-text:v1.5`
 - `OLLAMA_LLM_MODEL`, default `minimax-m2.5:cloud`
-- `RAG_TOP_K`, default `5`
+- `GRAPH_MAX_HOPS`, default `2`
+- `GRAPH_ENTITY_SEED_LIMIT`, default `5`
+- `GRAPH_NEIGHBOR_LIMIT`, default `20`
+- `GRAPH_MAX_CONTEXT_CHARACTERS`, default `6000`
+- `GRAPH_MAX_ENTITIES_PER_CHUNK`, default `8`
+- `GRAPH_MAX_RELATIONSHIPS_PER_CHUNK`, default `10`
 - `RAG_UPLOAD_RATE_LIMIT_TTL_MS`, default `60000`
 - `RAG_UPLOAD_RATE_LIMIT_LIMIT`, default `5`
 - `RAG_CHAT_RATE_LIMIT_TTL_MS`, default `60000`
@@ -173,17 +160,29 @@ RAG runtime config:
 - `RAG_STREAM_RATE_LIMIT_LIMIT`, default `10`
 - `RAG_RUNTIME_CONCURRENCY_LIMIT`, default `4`
 
-Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, and queues. It now includes persisted conversation history, SSE token streaming, upload/chat/stream throttles, in-process concurrency limits, and prompt-boundary safeguards, but not agentic memory outside the stored conversation messages.
+Neo4j graph model:
+- `(:Entity { id, userId, documentId, name, normalizedName, type, description, createdAt })`
+- `(:Chunk { id, userId, documentId, fileName, text, pageNumber?, createdAt })`
+- `(:Entity)-[:MENTIONED_IN]->(:Chunk)` — entity-to-source-chunk link
+- `(:Entity)-[:RELATED { id, type, description, userId, documentId, normalizedType, createdAt }]->(:Entity)`
+- Constraints: unique on `Entity.id`, `Chunk.id`; composite indexes on `Entity(userId, documentId)` and `Chunk(userId, documentId)`; full-text index `entityNameIndex` on `Entity(name, description)`.
+
+Client additions:
+- `/app/graph` route: document picker + `react-force-graph-2d` force-directed visualization; entity nodes colored by type; lazy-loaded in `vendor-graph` chunk.
+- Chat messages: collapsible "Knowledge graph used" panel (`ChatGraphContext`) showing entity pills and relationship rows, populated from the `graph` SSE event and persisted `graphContext`.
 
 ## Current Gaps / Do Not Assume
 
 - `TECH-STACK.md` and the architecture guides are the target direction, not proof that the feature exists.
 - Re-indexing, profile changes, and password reset APIs are not implemented.
 - Documents and chat now call real backend APIs.
-- Chat conversation history and selected document scope are persisted in Postgres; vector chunks remain in Qdrant.
-- Legacy `POST /api/v1/chat/ask` was removed because it searched globally. Use persisted conversations plus selected document scope.
-- Local runtime requires reachable Postgres, Qdrant, and Ollama services. Migrations must be applied before document metadata can persist.
-- Ollama must have the embedding model and chat model available: `nomic-embed-text:v1.5` and `minimax-m2.5:cloud`.
+- Chat conversation history and selected document scope are persisted in Postgres; graph data (entities/chunks/relationships) lives in Neo4j.
+- **Qdrant and Ollama embeddings are removed** from this project variation. Do not re-introduce them.
+- Legacy `POST /api/v1/chat/ask` was removed. Use persisted conversations plus selected document scope.
+- Local runtime requires reachable Postgres, **Neo4j**, and Ollama (LLM only) services. Migrations through 0004 must be applied. Start Neo4j: `docker run -d --name neo4j-graphrag -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:5`.
+- Ollama must have the LLM model available: `minimax-m2.5:cloud` (or whatever `OLLAMA_LLM_MODEL` is set to). Embeddings model is **not** required.
+- Graph extraction quality depends on the LLM model. Smaller/quantized models may produce empty or malformed JSON; `GraphExtractionService` returns empty results on failure rather than crashing.
+- APOC procedures (`apoc.path.subgraphNodes`) are **not used** — the `traverseNeighborhoodSimple` method uses standard BFS with plain Cypher to avoid the APOC dependency.
 
 ## Pitfalls & Lessons Learned
 
@@ -220,6 +219,12 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
 - Conversation deletion is hard delete only. Do not assume archive/soft-delete behavior exists unless a future schema change adds it.
 - SSE retry is client-side and retries the same persisted user message ID. It avoids duplicate user messages, but a server-side stream that already completed and persisted an assistant response before the network error may still require future idempotency safeguards.
 - Update this file after significant architecture decisions, new modules, API contracts, or development pitfalls so future sessions do not re-discover the same context.
+- **Graph RAG**: Do not use APOC procedures (`apoc.path.subgraphNodes`) — they require a separate plugin install. The `traverseNeighborhoodSimple` BFS method uses plain Cypher and is APOC-free.
+- **Graph RAG**: `DocumentsModule` imports `GraphModule` (one direction). `GraphModule` does NOT import `DocumentsModule` — instead it provides `DocumentsRepository` directly to avoid a circular dependency. ChatModule imports both `DocumentsModule` and `GraphModule` independently.
+- **Graph RAG**: The `graph` SSE event is emitted before `sources`. Client SSE handlers must register `graph` before `sources` and `done`.
+- **Graph RAG**: LLM extraction may return empty JSON or non-JSON for low-quality models. `GraphExtractionService` treats parse/validation failures as empty results (`{ entities: [], relationships: [] }`) and logs a warning — never throws. Document upload still succeeds with empty graph data.
+- **Graph RAG**: The `rag-graph-extraction` concurrency slot is used for both per-chunk extraction during ingestion and query-entity extraction during retrieval. Keep them in the same slot to bound total LLM calls.
+- **Graph RAG**: Client lint now reports 4 Fast Refresh warnings (down from 7 in the Naive RAG baseline — the remaining 4 are in generated UI files).
 
 ## Quick Verification Snapshot
 
@@ -247,3 +252,4 @@ Naive RAG intentionally excludes LangGraph, agents, hybrid search, reranking, an
   - `git ls-files Naive_RAG/server/.env Naive_RAG/server/dist Naive_RAG/server/node_modules` returned no tracked runtime/generated paths.
   - `git check-ignore -v Naive_RAG/server/.env Naive_RAG/server/dist Naive_RAG/server/node_modules` confirmed ignore coverage from `server/.gitignore`.
 - App scope cleanup verification: `npm run lint` and `npm run build` from `client/` passed; `npm run build`, `npm test -- --runInBand`, and `npm run test:e2e -- auth.e2e-spec.ts --runInBand` from `server/` passed. Auth e2e required local-bind permission for Supertest.
+- Graph RAG module verification: `npm run build` from `server/` passed; `npm test -- --runInBand` passed with **90 tests across 15 suites**; `npm run lint` from `client/` passed with 4 pre-existing Fast Refresh warnings; `npm run build` from `client/` passed producing a `vendor-graph` chunk (`188.82 kB` / `62.11 kB` gzip) for `react-force-graph-2d`, `app.graph` route chunk (`5.01 kB` / `2.04 kB` gzip), and `app.chat` route chunk (`39.13 kB` / `11.88 kB` gzip). End-to-end manual smoke tests not run (Neo4j and Ollama not reachable in this environment).

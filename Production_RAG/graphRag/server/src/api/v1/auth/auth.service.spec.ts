@@ -146,8 +146,8 @@ describe('AuthService', () => {
   });
 
   it('rejects missing authentication tokens', async () => {
-    await expect(authService.getAuthenticatedUser(undefined)).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      authService.getAuthenticatedUser(undefined),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

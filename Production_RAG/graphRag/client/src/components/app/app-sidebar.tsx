@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { MessageSquare, FileText, LogOut, Sparkles } from "lucide-react";
+import { MessageSquare, FileText, Network, LogOut, Sparkles } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -28,6 +28,7 @@ import { toast } from "sonner";
 const items = [
   { title: "Chat", url: "/app/chat", icon: MessageSquare },
   { title: "Documents", url: "/app/documents", icon: FileText },
+  { title: "Knowledge Graph", url: "/app/graph", icon: Network },
 ];
 
 function getInitials(name?: string) {

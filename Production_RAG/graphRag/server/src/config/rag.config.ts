@@ -1,7 +1,7 @@
 import { env } from './env';
 
 export const ragConfig = {
-  topK: env.RAG_TOP_K,
+  topK: env.RAG_TOP_K, // kept for backward compat; not used in graph retrieval
   chunkSize: 800,
   chunkOverlap: 100,
   maxPromptContextCharacters: 6000,

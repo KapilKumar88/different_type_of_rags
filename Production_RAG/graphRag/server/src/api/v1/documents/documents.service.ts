@@ -7,13 +7,11 @@ import {
 import { randomUUID } from 'node:crypto';
 import { documentUploadConfig } from '../../../config/document-upload.config';
 import type { Document } from '../../../database/schemas';
-import { EmbeddingsService } from '../../../services/embeddings/embeddings.service';
-import { QdrantService } from '../../../services/qdrant/qdrant.service';
 import { RagConcurrencyLimiterService } from '../../../services/rag-runtime/rag-concurrency-limiter.service';
-import type { VectorPoint } from '../../../types/rag.types';
+import { DocumentParsingService } from '../../../services/parsing/document-parsing.service';
+import { GraphService } from '../graph/graph.service';
 import { DocumentsRepository } from './documents.repository';
 import { splitDocumentText } from './helpers/text-splitter';
-import { DocumentParsingService } from '../../../services/parsing/document-parsing.service';
 
 export type UploadedDocumentFile = {
   originalname: string;
@@ -28,10 +26,9 @@ export class DocumentsService {
 
   constructor(
     private readonly documentsRepository: DocumentsRepository,
-    private readonly embeddingsService: EmbeddingsService,
-    private readonly qdrantService: QdrantService,
     private readonly documentParsingService: DocumentParsingService,
     private readonly ragConcurrencyLimiter: RagConcurrencyLimiterService,
+    private readonly graphService: GraphService,
   ) {}
 
   async upload(userId: string, file: UploadedDocumentFile): Promise<Document> {
@@ -61,47 +58,35 @@ export class DocumentsService {
     }
 
     // 2. Split the extracted text into small overlapping chunks.
-    const chunks = await splitDocumentText(extractedText);
+    const textChunks = await splitDocumentText(extractedText);
 
-    if (chunks.length === 0) {
+    if (textChunks.length === 0) {
       throw new BadRequestException('No text chunks could be created');
     }
 
-    if (chunks.length > documentUploadConfig.maxChunkCount) {
+    if (textChunks.length > documentUploadConfig.maxChunkCount) {
       throw new BadRequestException('Document has too many chunks to index');
     }
 
-    const createdAt = new Date().toISOString();
     const documentId = randomUUID();
+    const chunks = textChunks.map((chunk) => ({
+      id: randomUUID(),
+      text: chunk.text,
+      ...(chunk.pageNumber !== undefined
+        ? { pageNumber: chunk.pageNumber }
+        : {}),
+    }));
 
-    // 3. Generate embeddings for every chunk.
-    const vectors = await this.ragConcurrencyLimiter.run('embedding', () =>
-      this.embeddingsService.embedDocuments(chunks.map((chunk) => chunk.text)),
-    );
+    // 3. Extract entities and relationships from each chunk via the LLM.
+    const extractions = await this.graphService.extractFromChunks(chunks);
 
-    // 4. Store each chunk embedding and its payload as one Qdrant point.
-    const points: VectorPoint[] = chunks.map((chunk, index) => {
-      const chunkId = randomUUID();
-      const payload = {
-        chunkId,
-        documentId,
-        fileName: file.originalname,
-        text: chunk.text,
-        createdAt,
-        ...(chunk.pageNumber === undefined
-          ? {}
-          : { pageNumber: chunk.pageNumber }),
-      };
-
-      return {
-        id: chunkId,
-        vector: vectors[index] ?? [],
-        payload,
-      };
-    });
-
-    await this.ragConcurrencyLimiter.run('qdrant-write', () =>
-      this.qdrantService.upsertPoints(points),
+    // 4. Persist the knowledge graph in Neo4j.
+    await this.graphService.buildDocumentGraph(
+      userId,
+      documentId,
+      file.originalname,
+      chunks,
+      extractions,
     );
 
     try {
@@ -112,10 +97,10 @@ export class DocumentsService {
         fileName: file.originalname,
         mimeType: file.mimetype || 'application/octet-stream',
         sizeBytes: file.size,
-        chunkCount: chunks.length,
+        chunkCount: textChunks.length,
       });
     } catch (error) {
-      await this.cleanupUploadedVectors(documentId);
+      await this.cleanupDocumentGraph(userId, documentId);
       throw error;
     }
   }
@@ -135,7 +120,8 @@ export class DocumentsService {
       throw new NotFoundException('Document not found');
     }
 
-    await this.qdrantService.deleteByDocumentId(id);
+    await this.graphService.deleteDocumentGraph(userId, id);
+
     const deletedDocument = await this.documentsRepository.deleteByIdForUser(
       userId,
       id,
@@ -148,12 +134,15 @@ export class DocumentsService {
     return deletedDocument;
   }
 
-  private async cleanupUploadedVectors(documentId: string): Promise<void> {
+  private async cleanupDocumentGraph(
+    userId: string,
+    documentId: string,
+  ): Promise<void> {
     try {
-      await this.qdrantService.deleteByDocumentId(documentId);
+      await this.graphService.deleteDocumentGraph(userId, documentId);
     } catch (cleanupError) {
       this.logger.error(
-        `Failed to clean up Qdrant vectors after document metadata write failure for ${documentId}`,
+        `Failed to clean up Neo4j graph after document metadata write failure for ${documentId}`,
         cleanupError instanceof Error ? cleanupError.stack : undefined,
       );
     }

@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/chat/markdown";
+import { ChatGraphContext } from "@/components/chat/chat-graph-context";
 import { suggestedPrompts } from "@/components/chat/chat.constants";
 import { formatRelativeTime } from "@/components/chat/chat.helpers";
 import type { SourceChunk } from "@/types/chat.types";
@@ -49,6 +50,9 @@ export function MessageRow({
             <StreamingDots />
           )}
         </div>
+        {!isUser && message.graphContext && (
+          <ChatGraphContext graphContext={message.graphContext} />
+        )}
         {!isUser && message.sources && message.sources.length > 0 && (
           <SourceChunks sources={message.sources} />
         )}

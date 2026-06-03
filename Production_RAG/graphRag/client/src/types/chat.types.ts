@@ -16,6 +16,7 @@ export type ConversationMessage = {
   role: ConversationMessageRole;
   content: string;
   sources: SourceChunk[] | null;
+  graphContext: GraphStreamEvent | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -106,6 +107,22 @@ export type CreateMessageResponse = {
   };
 };
 
+export type GraphStreamEvent = {
+  entities: Array<{
+    id: string;
+    name: string;
+    type: string;
+    description: string;
+  }>;
+  relationships: Array<{
+    id: string;
+    sourceNormalizedName: string;
+    targetNormalizedName: string;
+    type: string;
+    description: string;
+  }>;
+};
+
 export type SourcesStreamEvent = {
   sources: SourceChunk[];
 };
@@ -124,6 +141,7 @@ export type ErrorStreamEvent = {
 };
 
 export type ChatStreamHandlers = {
+  onGraph?: (event: GraphStreamEvent) => void;
   onSources?: (event: SourcesStreamEvent) => void;
   onToken?: (event: TokenStreamEvent) => void;
   onDone?: (event: DoneStreamEvent) => void;
